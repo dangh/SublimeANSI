@@ -22,7 +22,7 @@ bld_cfg_settings = '''
 	"cmd": ["python", "-u", "ansi_test_build.py", "ansi_test_file.txt"],
 	"working_dir": "$packages/ANSIescape/test",
 	"target": "ansi_color_build",
-	"syntax": "Packages/ANSIescape/ANSI.tmLanguage"
+	"syntax": "Packages/ANSIescape/ANSI.sublime-syntax"
 }
 '''
 
