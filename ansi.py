@@ -149,11 +149,11 @@ class AnsiCommand(sublime_plugin.TextCommand):
 
         # if the syntax has not already been changed to ansi this means the command has
         # been run via the sublime console therefore the syntax must be changed manually
-        if view.settings().get("syntax") != "Packages/ANSIescape/ANSI.sublime-syntax":
-            view.settings().set("syntax", "Packages/ANSIescape/ANSI.sublime-syntax")
+        if view.settings().get("syntax") != "Packages/sublime-ansi/ANSI.sublime-syntax":
+            view.settings().set("syntax", "Packages/sublime-ansi/ANSI.sublime-syntax")
 
         view.settings().set("ansi_enabled", True)
-        view.settings().set("color_scheme", "Packages/User/ANSIescape/ansi.tmTheme")
+        view.settings().set("color_scheme", "Packages/User/sublime-ansi/ansi.tmTheme")
         view.settings().set("draw_white_space", "none")
 
         # save the view's original scratch and read only settings
@@ -246,7 +246,7 @@ class UndoAnsiCommand(sublime_plugin.WindowCommand):
 
         # if the syntax has not already been changed from ansi this means the command has
         # been run via the sublime console therefore the syntax must be changed manually
-        if view.settings().get("syntax") == "Packages/ANSIescape/ANSI.sublime-syntax":
+        if view.settings().get("syntax") == "Packages/sublime-ansi/ANSI.sublime-syntax":
             view.settings().set("syntax", "Packages/Text/Plain text.tmLanguage")
 
         view.settings().erase("ansi_enabled")
@@ -281,12 +281,12 @@ class AnsiEventListener(sublime_plugin.EventListener):
     def process_view_open(self, view):
         self._del_event_listeners(view)
         self._add_event_listeners(view)
-        if view.settings().get("syntax") == "Packages/ANSIescape/ANSI.sublime-syntax":
+        if view.settings().get("syntax") == "Packages/sublime-ansi/ANSI.sublime-syntax":
             view.run_command("ansi")
 
     def process_view_close(self, view):
         self._del_event_listeners(view)
-        #if view.settings().get("syntax") == "Packages/ANSIescape/ANSI.sublime-syntax":
+        #if view.settings().get("syntax") == "Packages/sublime-ansi/ANSI.sublime-syntax":
         #    view.window().run_command("undo_ansi") ** this needs to be tested **
 
     def detect_left_ansi(self, view):
@@ -296,7 +296,7 @@ class AnsiEventListener(sublime_plugin.EventListener):
         if not self._is_view_valid(view):
             self._del_event_listeners(view)
             return
-        if view.settings().get("syntax") != "Packages/ANSIescape/ANSI.sublime-syntax":
+        if view.settings().get("syntax") != "Packages/sublime-ansi/ANSI.sublime-syntax":
             return
         if view.settings().get("ansi_in_progres", False):
             debug(view, "ansi in progres")
@@ -313,7 +313,7 @@ class AnsiEventListener(sublime_plugin.EventListener):
             return
         if view.settings().get("ansi_in_progres", False):
             return
-        if view.settings().get("syntax") == "Packages/ANSIescape/ANSI.sublime-syntax":
+        if view.settings().get("syntax") == "Packages/sublime-ansi/ANSI.sublime-syntax":
             if not view.settings().has("ansi_enabled"):
                 debug(view, "Syntax change detected (running ansi command).")
                 view.run_command("ansi", args={"clear_before": True})
@@ -334,12 +334,12 @@ class AnsiEventListener(sublime_plugin.EventListener):
     def _add_event_listeners(self, view):
         view.settings().add_on_change("CHECK_FOR_ANSI_SYNTAX", lambda: self.detect_syntax_change(view))
         view.settings().add_on_change("CHECK_FOR_LEFT_ANSI", lambda: self.detect_left_ansi(view))
-        debug(view, "ANSIescape event listeners assigned to view.")
+        debug(view, "sublime-ansi event listeners assigned to view.")
 
     def _del_event_listeners(self, view):
         view.settings().clear_on_change("CHECK_FOR_ANSI_SYNTAX")
         view.settings().clear_on_change("CHECK_FOR_LEFT_ANSI")
-        debug(view, "ANSIescape event listener removed from view.")
+        debug(view, "sublime-ansi event listener removed from view.")
 
 
 class AnsiColorBuildCommand(Default.exec.ExecCommand):
@@ -353,7 +353,7 @@ class AnsiColorBuildCommand(Default.exec.ExecCommand):
             self.process_trigger = val
         else:
             self.process_trigger = None
-            sublime.error_message("ANSIescape settings warning:\n\nThe setting ANSI_process_trigger has been set to an invalid value; must be one of 'on_finish' or 'on_data'.")
+            sublime.error_message("sublime-ansi settings warning:\n\nThe setting ANSI_process_trigger has been set to an invalid value; must be one of 'on_finish' or 'on_data'.")
 
     @classmethod
     def clear_build_settings(self, settings):
@@ -364,7 +364,7 @@ class AnsiColorBuildCommand(Default.exec.ExecCommand):
         needDataCodec = True if int(sublime.version()) < 3169 else False
 
         view = self.output_view
-        if not view.settings().get("syntax") == "Packages/ANSIescape/ANSI.sublime-syntax":
+        if not view.settings().get("syntax") == "Packages/sublime-ansi/ANSI.sublime-syntax":
             super(AnsiColorBuildCommand, self).on_data(proc, data)
             return
 
@@ -424,7 +424,7 @@ class AnsiColorBuildCommand(Default.exec.ExecCommand):
         super(AnsiColorBuildCommand, self).on_finished(proc)
         if self.process_trigger == "on_finish":
             view = self.output_view
-            if view.settings().get("syntax") == "Packages/ANSIescape/ANSI.sublime-syntax":
+            if view.settings().get("syntax") == "Packages/sublime-ansi/ANSI.sublime-syntax":
                 view.run_command("ansi", args={"clear_before": True})
 
 
@@ -468,7 +468,7 @@ def plugin_loaded():
     # load pluggin settings
     settings = sublime.load_settings("ansi.sublime-settings")
     # create ansi color scheme directory
-    ansi_cs_dir = os.path.join(sublime.packages_path(), "User", "ANSIescape")
+    ansi_cs_dir = os.path.join(sublime.packages_path(), "User", "sublime-ansi")
     if not os.path.exists(ansi_cs_dir):
         os.makedirs(ansi_cs_dir)
     # create ansi color scheme file

@@ -5,24 +5,24 @@ import re
 import sys
 
 help_text = '''
-This scripts adds the ANSIescape mock build to the list of available
+This scripts adds the sublime-ansi mock build to the list of available
 build systems within Sublime Text. The purpose of this mock build is
-to provide an easy way of testing changes to the ANSIescape package.
+to provide an easy way of testing changes to the sublime-ansi package.
 
 Usage: ansi_test_setup.py [options]
 
 Options:
  -h --help    Print help and exit.
- -c --create  Add the ANSIescape mock build to Sublime Text.
- -r --remove  Remove the ANSIescape mock build from Sublime Text.
+ -c --create  Add the sublime-ansi mock build to Sublime Text.
+ -r --remove  Remove the sublime-ansi mock build from Sublime Text.
 '''
 
 bld_cfg_settings = '''
 {
 	"cmd": ["python", "-u", "ansi_test_build.py", "ansi_test_file.txt"],
-	"working_dir": "$packages/ANSIescape/test",
+	"working_dir": "$packages/sublime-ansi/test",
 	"target": "ansi_color_build",
-	"syntax": "Packages/ANSIescape/ANSI.sublime-syntax"
+	"syntax": "Packages/sublime-ansi/ANSI.sublime-syntax"
 }
 '''
 
@@ -36,13 +36,13 @@ def help():
 def create():
     with open(bld_cfg_file, 'w') as file:
         file.write(bld_cfg_settings)
-    print('Added ANSIescape test build to Sublime Text.')
+    print('Added sublime-ansi test build to Sublime Text.')
 
 
 def remove():
     if os.path.isfile(bld_cfg_file):
         os.remove(bld_cfg_file)
-    print('Removed ANSIescape test build from Sublime Text.')
+    print('Removed sublime-ansi test build from Sublime Text.')
 
 opt = help
 

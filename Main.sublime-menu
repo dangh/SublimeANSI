@@ -12,12 +12,12 @@
                 "children":
                 [
                     {
-                        "caption": "ANSIescape",
+                        "caption": "sublime-ansi",
                         "children":
                         [
                             {
                                 "command": "open_file",
-                                "args": {"file": "${packages}/ANSIescape/ansi.sublime-settings"},
+                                "args": {"file": "${packages}/sublime-ansi/ansi.sublime-settings"},
                                 "caption": "Settings – Default"
                             },
                             {
