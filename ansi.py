@@ -2,7 +2,6 @@
 
 from collections import namedtuple
 from functools import partial
-import bisect
 import Default
 import inspect
 import os
@@ -62,7 +61,7 @@ def fast_view_find_all(view, regex_string):
     @param view         the View object
     @param regex_string the regular expression string
 
-    @return sublime.Region[]
+    @return (sublime.Region, maching groups)[]
     """
 
     regex_obj = get_regex_obj(regex_string)
@@ -73,7 +72,7 @@ def fast_view_find_all(view, regex_string):
     if iterator is None:
         return []
 
-    return [sublime.Region(*(m.span())) for m in iterator]
+    return [(sublime.Region(*(m.span())),) + m.groups() for m in iterator]
 
 
 def ansi_definitions(content=None):
@@ -102,6 +101,37 @@ def ansi_definitions(content=None):
             regex = r'(?:{0}{1}|{1}{0})[^\x1b]*'.format(fg['code'], bg['code'])
             scope = "{0}{1}".format(fg['scope'], bg['scope'])
             yield AnsiDefinition(scope, regex)
+
+
+def get_color_index(name):
+    color_names = (
+        None,
+        'black',
+        'red',
+        'green',
+        'yellow',
+        'blue',
+        'magenta',
+        'cyan',
+        'white',
+        'black_light',
+        'red_light',
+        'green_light',
+        'yellow_light',
+        'blue_light',
+        'magenta_light',
+        'cyan_light',
+        'white_light'
+    )
+    return color_names.index(name) if name in color_names else 0
+
+
+def get_scope(d):
+    return "f{0}_b{1}_d{2}".format(
+        get_color_index(d['foreground']) if 'foreground' in d else 0,
+        get_color_index(d['background']) if 'background' in d else 0,
+        1 if 'dim' in d else 0
+    )
 
 
 class AnsiRegion(object):
@@ -188,42 +218,118 @@ class AnsiCommand(sublime_plugin.TextCommand):
     def _colorize_ansi_codes(self, edit):
         view = self.view
 
-        # removing unsupported ansi escape codes before going forward: 2m 4m 5m 7m 8m
-        ansi_unsupported_codes = fast_view_find_all(view, r'\x1b\[(0;)?[24578]m')
-        for r in reversed(ansi_unsupported_codes):
-            view.replace(edit, r, '\x1b[1m')
+        SEQUENCES = (
+            # (flag, (
+            #     (value, code_on, (code_off))
+            # ))
+            ('bold', (
+                ('bold', 1, (0, 21, 22)),
+            )),
+            ('dim', (
+                ('dim', 2, (0, 22)),
+            )),
+            ('italic', (
+                ('italic', 3, (0, 23)),
+            )),
+            ('underline', (
+                ('underline', 4, (0, 24)),
+            )),
+            ('inverse', (
+                ('inverse', 7, (0, 27)),
+            )),
+            ('hidden', (
+                ('hidden', 8, (0, 28)),
+            )),
+            ('strikethrough', (
+                ('strikethrough', 9, (0, 29)),
+            )),
+            ('foreground', (
+                ('black', 30, (0, 39)),
+                ('red', 31, (0, 39)),
+                ('green', 32, (0, 39)),
+                ('yellow', 33, (0, 39)),
+                ('blue', 34, (0, 39)),
+                ('magenta', 35, (0, 39)),
+                ('cyan', 36, (0, 39)),
+                ('white', 37, (0, 39)),
+                ('black_light', 90, (0, 39)),
+                ('red_light', 91, (0, 39)),
+                ('green_light', 92, (0, 39)),
+                ('yellow_light', 93, (0, 39)),
+                ('blue_light', 94, (0, 39)),
+                ('magenta_light', 95, (0, 39)),
+                ('cyan_light', 96, (0, 39)),
+                ('white_light', 97, (0, 39)),
+            )),
+            ('background', (
+                ('black', 40, (0, 49)),
+                ('red', 41, (0, 49)),
+                ('green', 42, (0, 49)),
+                ('yellow', 43, (0, 49)),
+                ('blue', 44, (0, 49)),
+                ('magenta', 45, (0, 49)),
+                ('cyan', 46, (0, 49)),
+                ('white', 47, (0, 49)),
+                ('black_light', 100, (0, 49)),
+                ('red_light', 101, (0, 49)),
+                ('green_light', 102, (0, 49)),
+                ('yellow_light', 103, (0, 49)),
+                ('blue_light', 104, (0, 49)),
+                ('magenta_light', 105, (0, 49)),
+                ('cyan_light', 106, (0, 49)),
+                ('white_light', 107, (0, 49)),
+            ))
+        )
+
+        ansi_codes = fast_view_find_all(view, r'\x1b\[([0-9;]*)m')
 
         # collect ansi regions
         ansi_regions = {
             # scope: regions,
         }
-        content = view.substr(sublime.Region(0, view.size()))
-        for ansi in ansi_definitions(content):
-            regions = fast_view_find_all(view, ansi.regex)
-            if regions:
-                debug(view, "scope: {}\nregex: {}\nregions: {}\n----------\n".format(ansi.scope, ansi.regex, ansi_regions))
-                ansi_regions[ansi.scope] = regions
+
+        text_length = 0  # length of all ansi text
+        seq_length = 0  # length of all escaped sequences
+        flags = {}
+        for seq_region, codes in ansi_codes:
+            this_text_length = seq_region.a - (text_length + seq_length)
+            this_seq_length = seq_region.b - seq_region.a
+            if this_text_length:
+                text_region = sublime.Region(text_length, text_length + this_text_length)
+                scope = get_scope(flags)
+                if scope not in ansi_regions:
+                    ansi_regions[scope] = []
+                ansi_regions[scope].append(text_region)
+                debug(view, "scope: {}\nregions: {}\n----------\n".format(scope, ansi_regions[scope]))
+
+            text_length += this_text_length
+            seq_length += this_seq_length
+
+            codes = map(int, filter(None, codes.split(';')))
+            for code in codes:
+                for flag, variants in SEQUENCES:
+                    for value, code_on, code_off in variants:
+                        if code == code_on:
+                            flags[flag] = value
+                        elif code in code_off:
+                            flags.pop(flag, None)
+
+        # close last region if it doesn't close properly
+        last_text_length = view.size() - (text_length + seq_length)
+        if last_text_length:
+            text_region = sublime.Region(text_length, text_length + last_text_length)
+            scope = get_scope(flags)
+            if scope not in ansi_regions:
+                ansi_regions[scope] = []
+            ansi_regions[scope].append(text_region)
+            debug(view, "scope: {}\nregions: {}\n----------\n".format(scope, ansi_regions[scope]))
 
         # removing ansi escaped codes
-        ansi_codes = fast_view_find_all(view, r'\x1b\[[0-9;]*m')
-        for r in reversed(ansi_codes):
+        for r, _ in reversed(ansi_codes):
             view.erase(edit, r)
 
-        # build offset correction tables
-        correction_tables = {
-            'points': [0],
-            'offsets': [0],
-        }
-        for r in ansi_codes:
-            correction_tables['points'].append(r.end())
-            correction_tables['offsets'].append(r.size() + correction_tables['offsets'][-1])
-
-        # apply offset correction to ansi regions
+        # render corrected ansi regions
         for scope, regions in ansi_regions.items():
-            for r in regions:
-                r.a -= correction_tables['offsets'][bisect.bisect(correction_tables['points'], r.a) - 1]
-                r.b -= correction_tables['offsets'][bisect.bisect(correction_tables['points'], r.b) - 1]
-            # render corrected ansi regions
             sum_regions = view.get_regions(scope) + regions
             view.add_regions(scope, sum_regions, scope, '', sublime.DRAW_NO_OUTLINE | sublime.PERSISTENT)
 
@@ -444,20 +550,22 @@ CS_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
 %s</array></dict></plist>
 """
 
-ANSI_SCOPE = "<dict><key>scope</key><string>{0}{1}</string><key>settings</key><dict><key>background</key><string>{2}</string><key>foreground</key><string>{3}</string>{4}</dict></dict>\n"
+ANSI_SCOPE = "<dict><key>scope</key><string>{0}</string><key>settings</key><dict><key>background</key><string>{1}</string><key>foreground</key><string>{2}</string>{3}</dict></dict>\n"
 
 
 def generate_color_scheme(cs_file, settings):
     print("Regenerating ANSI color scheme...")
     cs_scopes = ""
-    for bg in settings.get("ANSI_BG", []):
-        for fg in settings.get("ANSI_FG", []):
-            if (bg.get('font_style') and bg['font_style'] == 'bold') or (fg.get('font_style') and fg['font_style'] == 'bold'):
-                font_style = "<key>fontStyle</key><string>bold</string>"
-            else:
-                font_style = ''
-            cs_scopes += ANSI_SCOPE.format(fg['scope'], bg['scope'], bg['color'], fg['color'], font_style)
     g = settings.get("GENERAL")
+    colors = settings.get("ANSI_COLORS", {})
+    color_names = [''] + [c for c in colors]
+    for bg in color_names:
+        bg_color = colors[bg] if bg in colors else g['background']
+        for fg in color_names:
+            fg_color = colors[fg] if fg in colors else g['foreground']
+            for bold in [0, 1]:
+                font_style = "<key>fontStyle</key><string>bold</string>" if bold else ""
+                cs_scopes += ANSI_SCOPE.format(get_scope({'foreground': fg, 'background': bg}), bg_color, fg_color, font_style)
     vals = [g['background'], g['caret'], g['foreground'], g['gutter'], g['gutterForeground'], g['invisibles'], g['lineHighlight'], g['selection'], cs_scopes]
     theme = CS_TEMPLATE % tuple(vals)
     with open(cs_file, 'w') as color_scheme:
