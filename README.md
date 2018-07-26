@@ -5,3 +5,4 @@ This repo is forked from https://github.com/aziz/SublimeANSI as a persona custom
     - Use .sublime-syntax instead of .tmLanguage
 - Fix [region swap foreground and background](https://forum.sublimetext.com/t/add-regions-swaps-background-and-foreground/3587)
 - Simpler config
+- Support `dim` instead of `bold`
