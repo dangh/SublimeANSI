@@ -1,8 +1,12 @@
-This repo is forked from https://github.com/aziz/SublimeANSI as a persona customization.
+This repo is forked from https://github.com/aziz/SublimeANSI as a personal customization.
 
 - Only support SublimeText 3 for the ease of development
     - Use .sublime-color-scheme instead of .tmTheme
     - Use .sublime-syntax instead of .tmLanguage
-- Fix [region swap foreground and background](https://forum.sublimetext.com/t/add-regions-swaps-background-and-foreground/3587)
-- Simpler config
-- Support `dim` instead of `bold`
+    
+- [x] Fix [region swap foreground and background](https://forum.sublimetext.com/t/add-regions-swaps-background-and-foreground/3587)
+- [x] Simpler config
+- [x] Support `dim`
+- [x] Remove `bold` since it's not working
+- [ ] Support multiple themes
+- [ ] Support [highlight custom string](https://github.com/aziz/SublimeANSI/issues/44)
