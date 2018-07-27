@@ -553,6 +553,30 @@ CS_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
 ANSI_SCOPE = "<dict><key>scope</key><string>{0}</string><key>settings</key><dict><key>background</key><string>{1}</string><key>foreground</key><string>{2}</string>{3}</dict></dict>\n"
 
 
+def adjust_to_diff(color):
+    """
+    If we draw the region with the same background as the theme background,
+    sublime will use foreground color as background, which is undesirable.
+
+    This function will adjust the color so it will slightly different to the background,
+    but still close enough so the human eye cannot distinguise.
+    """
+
+    # RGB format
+    m = re.match(r'^#([0-9a-fA-F])([0-9a-fA-F])([0-9a-fA-F])$', color)
+    if m:
+        r, g, b = g.groups()
+        return '#{0}{0}{1}{1}{2}{3}'.format(r, g, b, '1' if b == '0' else chr(ord(b) - 1))
+
+    # RRGGBB format
+    m = re.match(r'^#([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F])([0-9a-fA-F])$', color)
+    if m:
+        rr, gg, b1, b2 = m.groups()
+        return '#{0}{1}{2}{3}'.format(rr, gg, b1, '1' if b2 == '0' else chr(ord(b2) - 1))
+
+    return color
+
+
 def generate_color_scheme(cs_file, settings):
     print("Regenerating ANSI color scheme...")
     cs_scopes = ""
@@ -561,6 +585,8 @@ def generate_color_scheme(cs_file, settings):
     color_names = [''] + [c for c in colors]
     for bg in color_names:
         bg_color = colors[bg] if bg in colors else g['background']
+        if bg_color == g['background']:
+            bg_color = adjust_to_diff(bg_color)
         for fg in color_names:
             fg_color = colors[fg] if fg in colors else g['foreground']
             for bold in [0, 1]:
