@@ -17,16 +17,26 @@
         "cyan_light":    "#68fdfe",
         "white_light":   "#ffffff",
     },
-    "GENERAL":  {
-        "background":       "#000000",
-        "caret":            "#FF5E00",
-        "foreground":       "#F2F2F2",
-        "gutter":           "#000000",
-        "gutterForeground": "#FFFFFF55",
-        "invisibles":       "#FFFFFF00",
-        "lineHighlight":    "#FFFFFF00",
-        "selection":        "#FFFFFF33"
+
+    // these values will be put directly to the `globals` section in the .sublime-color-scheme file
+    // see: https://www.sublimetext.com/docs/3/color_schemes.html#global_settings
+    "GENERAL": {
+        "background":        "#000000",
+        "foreground":        "#F2F2F2",
+        "caret":             "#FF5E00",
+        "gutter":            "#000000",
+        "gutter_foreground": "#FFFFFF55",
+        "invisibles":        "#FFFFFF00",
+        "selection":         "#FFFFFF33",
+        "line_highlight":    "#FFFFFF00",
     },
+
+    "OTHERS": {
+        // alpha adjuster for the dimmed text, from 0.0 to 1.0
+        // see: https://www.sublimetext.com/docs/3/color_schemes.html#colors
+        "dim_alpha": 0.7,
+    },
+
     // when to process ANSI encoded string
     // possible values:
     // - on_finish - after whole build process (default)

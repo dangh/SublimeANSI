@@ -4,6 +4,7 @@ from collections import namedtuple
 from functools import partial
 import Default
 import inspect
+import json
 import os
 import re
 import sublime
@@ -183,7 +184,7 @@ class AnsiCommand(sublime_plugin.TextCommand):
             view.settings().set("syntax", "Packages/sublime-ansi/ANSI.sublime-syntax")
 
         view.settings().set("ansi_enabled", True)
-        view.settings().set("color_scheme", "Packages/User/sublime-ansi/ansi.tmTheme")
+        view.settings().set("color_scheme", "Packages/User/sublime-ansi/ansi.sublime-color-scheme")
         view.settings().set("draw_white_space", "none")
 
         # save the view's original scratch and read only settings
@@ -534,25 +535,6 @@ class AnsiColorBuildCommand(Default.exec.ExecCommand):
                 view.run_command("ansi", args={"clear_before": True})
 
 
-CS_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict><key>name</key><string>Ansi</string>
-<key>settings</key><array><dict><key>settings</key><dict>
-<key>background</key><string>%s</string>
-<key>caret</key><string>%s</string>
-<key>foreground</key><string>%s</string>
-<key>gutter</key><string>%s</string>
-<key>gutterForeground</key><string>%s</string>
-<key>invisibles</key><string>%s</string>
-<key>lineHighlight</key><string>%s</string>
-<key>selection</key><string>%s</string>
-</dict></dict>
-%s</array></dict></plist>
-"""
-
-ANSI_SCOPE = "<dict><key>scope</key><string>{0}</string><key>settings</key><dict><key>background</key><string>{1}</string><key>foreground</key><string>{2}</string>{3}</dict></dict>\n"
-
-
 def adjust_to_diff(color):
     """
     If we draw the region with the same background as the theme background,
@@ -579,23 +561,36 @@ def adjust_to_diff(color):
 
 def generate_color_scheme(cs_file, settings):
     print("Regenerating ANSI color scheme...")
-    cs_scopes = ""
-    g = settings.get("GENERAL")
-    colors = settings.get("ANSI_COLORS", {})
-    color_names = [''] + [c for c in colors]
-    for bg in color_names:
-        bg_color = colors[bg] if bg in colors else g['background']
-        if bg_color == g['background']:
-            bg_color = adjust_to_diff(bg_color)
-        for fg in color_names:
-            fg_color = colors[fg] if fg in colors else g['foreground']
-            for bold in [0, 1]:
-                font_style = "<key>fontStyle</key><string>bold</string>" if bold else ""
-                cs_scopes += ANSI_SCOPE.format(get_scope({'foreground': fg, 'background': bg}), bg_color, fg_color, font_style)
-    vals = [g['background'], g['caret'], g['foreground'], g['gutter'], g['gutterForeground'], g['invisibles'], g['lineHighlight'], g['selection'], cs_scopes]
-    theme = CS_TEMPLATE % tuple(vals)
+    settings = sublime.load_settings("ansi.sublime-settings")
+    ANSI_COLORS = settings.get('ANSI_COLORS', {})
+    GENERAL = settings.get('GENERAL', {})
+    OTHERS = settings.get('OTHERS', {})
+    scheme = {
+        'name': 'ANSI',
+        'variables': {
+            'cF': GENERAL['foreground'] or ANSI_COLORS['white'],
+            'cB': adjust_to_diff(GENERAL['background'] or ANSI_COLORS['black']),
+        },
+        'globals': GENERAL,
+        'rules': []
+    }
+    for name, color in ANSI_COLORS.items():
+        scheme['variables']['c{0}'.format(get_color_index(name))] = color
+    for fg in range(17):
+        fg_var = 'var(c{0})'.format(fg) if fg else 'var(cF)'
+        for bg in range(17):
+            bg_var = 'var(c{0})'.format(bg) if bg else 'var(cB)'
+            for dim in [0, 1]:
+                fg_var_adjusted = fg_var
+                if dim and OTHERS['dim_alpha']:
+                    fg_var_adjusted = 'color({0}a({1}))'.format(fg_var, OTHERS['dim_alpha'])
+                scheme['rules'].append({
+                    'scope': 'f{0}_b{1}_d{2}'.format(fg, bg, dim),
+                    'foreground': fg_var_adjusted,
+                    'background': bg_var
+                })
     with open(cs_file, 'w') as color_scheme:
-        color_scheme.write(theme)
+        json.dump(scheme, color_scheme, separators=(',', ':'))
 
 
 def plugin_loaded():
@@ -606,7 +601,7 @@ def plugin_loaded():
     if not os.path.exists(ansi_cs_dir):
         os.makedirs(ansi_cs_dir)
     # create ansi color scheme file
-    cs_file = os.path.join(ansi_cs_dir, "ansi.tmTheme")
+    cs_file = os.path.join(ansi_cs_dir, "ansi.sublime-color-scheme")
     if not os.path.isfile(cs_file):
         generate_color_scheme(cs_file, settings)
     # update the settings for the plugin
