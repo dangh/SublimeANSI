@@ -9,4 +9,4 @@ This repo is forked from https://github.com/aziz/SublimeANSI as a personal custo
 - [x] Support `dim`
 - [x] Remove `bold` since it's not working
 - [ ] Support multiple themes
-- [ ] Support [highlight custom string](https://github.com/aziz/SublimeANSI/issues/44)
+- [x] Support [highlight custom string](https://github.com/aziz/SublimeANSI/issues/44)

@@ -294,12 +294,13 @@ def get_regex_obj(regex_string, flags=0):
     return regex_obj_cache[regex_string]
 
 
-def fast_view_find_all(view, regex_string):
+def fast_view_find_all(view, regex_string, flags=0):
     """
     @brief A faster implementation of View.find_all().
 
     @param view         the View object
     @param regex_string the regular expression string
+    @param flags        the regular expression flags
 
     @return (sublime.Region, maching groups)[]
     """
@@ -573,11 +574,14 @@ class AnsiCommand(sublime_plugin.TextCommand):
 
         if clear_before:
             self._remove_ansi_regions()
+            self._remove_highlight_regions()
 
         if regions is None:
             self._colorize_ansi_codes(edit)
         else:
             self._colorize_regions(regions)
+
+        self._colorize_highlight_regions(edit)
 
         view.settings().set("ansi_in_progres", False)
         view.settings().set("ansi_size", view.size())
@@ -655,6 +659,23 @@ class AnsiCommand(sublime_plugin.TextCommand):
         view = self.view
         for ansi in ansi_definitions():
             view.erase_regions(ansi.scope)
+
+    def _colorize_highlight_regions(self, edit):
+        view = self.view
+        settings = sublime.load_settings("ansi.sublime-settings")
+        h = 0
+        for rule in settings.get('HIGHLIGHT', []):
+            h += 1
+            scope = 'h{0}'.format(h)
+            regions = [i[0] for i in fast_view_find_all(view, rule['regex'], re.IGNORECASE)]
+            sum_regions = view.get_regions(scope) + regions
+            view.add_regions(scope, sum_regions, scope, '', sublime.DRAW_NO_OUTLINE | sublime.PERSISTENT)
+
+    def _remove_highlight_regions(self):
+        view = self.view
+        settings = sublime.load_settings("ansi.sublime-settings")
+        for h in range(len(settings.get('HIGHLIGHT', []))):
+            view.erase_regions('h{0}'.format(h))
 
 
 class UndoAnsiCommand(sublime_plugin.WindowCommand):
@@ -882,6 +903,7 @@ def generate_color_scheme(cs_file, settings):
     ANSI_COLORS = settings.get('ANSI_COLORS', {})
     GENERAL = settings.get('GENERAL', {})
     OTHERS = settings.get('OTHERS', {})
+    HIGHLIGHT = settings.get('HIGHLIGHT', [])
     scheme = {
         'name': 'ANSI',
         'variables': {
@@ -906,6 +928,14 @@ def generate_color_scheme(cs_file, settings):
                     'foreground': fg_var_adjusted,
                     'background': bg_var
                 })
+    h = 0
+    for rule in HIGHLIGHT:
+        h += 1
+        scheme['rules'].append({
+            'scope': 'h{0}'.format(h),
+            'foreground': rule['foreground'] if 'foreground' in rule else 'var(cF)',
+            'background': rule['background'] if 'background' in rule else 'var(cB)',
+        })
     with open(cs_file, 'w') as color_scheme:
         json.dump(scheme, color_scheme, separators=(',', ':'))
 
