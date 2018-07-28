@@ -15,6 +15,244 @@ DEBUG = False
 AnsiDefinition = namedtuple("AnsiDefinition", "scope regex")
 regex_obj_cache = {}
 
+REGEX_RANGE_0_F = r'[0-9a-fA-F]'
+REGEX_RANGE_0_255 = r'\b([0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5])\b'  # 0..255
+REGEX_RANGE_0_1_FLOAT = r'((\.\d+)|(0(\.\d+))|(1(\.0+)?))'  # 0..1
+REGEX_RANGE_0_100 = r'0+|(0*[0-9])|(0*[1-9][0-9])|100'  # 0%..100%
+REGEX_RANGE_0_360 = r'0+|(0*[0-9])|(0*[1-9][0-9])|(0*[1-2][0-9][0-9])|(0*3[0-5][0-9])|(0*360)'
+
+ANSI_COLORS_NAME = (
+    'black',
+    'red',
+    'green',
+    'yellow',
+    'blue',
+    'magenta',
+    'cyan',
+    'white',
+    'black_light',
+    'red_light',
+    'green_light',
+    'yellow_light',
+    'blue_light',
+    'magenta_light',
+    'cyan_light',
+    'white_light',
+)
+
+SEQUENCES = {
+    # {flag, {
+    #     value: (code_on, (code_off))
+    # }}
+    'bold': {
+        'bold': (1, (0, 21, 22)),
+    },
+    'dim': {
+        'dim': (2, (0, 22)),
+    },
+    'italic': {
+        'italic': (3, (0, 23)),
+    },
+    'underline': {
+        'underline': (4, (0, 24)),
+    },
+    'inverse': {
+        'inverse': (7, (0, 27)),
+    },
+    'hidden': {
+        'hidden': (8, (0, 28)),
+    },
+    'strikethrough': {
+        'strikethrough': (9, (0, 29)),
+    },
+    'foreground': {
+        'black': (30, (0, 39)),
+        'red': (31, (0, 39)),
+        'green': (32, (0, 39)),
+        'yellow': (33, (0, 39)),
+        'blue': (34, (0, 39)),
+        'magenta': (35, (0, 39)),
+        'cyan': (36, (0, 39)),
+        'white': (37, (0, 39)),
+        'black_light': (90, (0, 39)),
+        'red_light': (91, (0, 39)),
+        'green_light': (92, (0, 39)),
+        'yellow_light': (93, (0, 39)),
+        'blue_light': (94, (0, 39)),
+        'magenta_light': (95, (0, 39)),
+        'cyan_light': (96, (0, 39)),
+        'white_light': (97, (0, 39)),
+    },
+    'background': {
+        'black': (40, (0, 49)),
+        'red': (41, (0, 49)),
+        'green': (42, (0, 49)),
+        'yellow': (43, (0, 49)),
+        'blue': (44, (0, 49)),
+        'magenta': (45, (0, 49)),
+        'cyan': (46, (0, 49)),
+        'white': (47, (0, 49)),
+        'black_light': (100, (0, 49)),
+        'red_light': (101, (0, 49)),
+        'green_light': (102, (0, 49)),
+        'yellow_light': (103, (0, 49)),
+        'blue_light': (104, (0, 49)),
+        'magenta_light': (105, (0, 49)),
+        'cyan_light': (106, (0, 49)),
+        'white_light': (107, (0, 49)),
+    },
+}
+
+CSS_COLORS = {
+    'aliceblue': '#f0f8ff',
+    'antiquewhite': '#faebd7',
+    'aqua': '#00ffff',
+    'aquamarine': '#7fffd4',
+    'azure': '#f0ffff',
+    'beige': '#f5f5dc',
+    'bisque': '#ffe4c4',
+    'black': '#000000',
+    'blanchedalmond': '#ffebcd',
+    'blue': '#0000ff',
+    'blueviolet': '#8a2be2',
+    'brown': '#a52a2a',
+    'burlywood': '#deb887',
+    'cadetblue': '#5f9ea0',
+    'chartreuse': '#7fff00',
+    'chocolate': '#d2691e',
+    'coral': '#ff7f50',
+    'cornflowerblue': '#6495ed',
+    'cornsilk': '#fff8dc',
+    'crimson': '#dc143c',
+    'cyan': '#00ffff',
+    'darkblue': '#00008b',
+    'darkcyan': '#008b8b',
+    'darkgoldenrod': '#b8860b',
+    'darkgray': '#a9a9a9',
+    'darkgreen': '#006400',
+    'darkgrey': '#a9a9a9',
+    'darkkhaki': '#bdb76b',
+    'darkmagenta': '#8b008b',
+    'darkolivegreen': '#556b2f',
+    'darkorange': '#ff8c00',
+    'darkorchid': '#9932cc',
+    'darkred': '#8b0000',
+    'darksalmon': '#e9967a',
+    'darkseagreen': '#8fbc8f',
+    'darkslateblue': '#483d8b',
+    'darkslategray': '#2f4f4f',
+    'darkslategrey': '#2f4f4f',
+    'darkturquoise': '#00ced1',
+    'darkviolet': '#9400d3',
+    'deeppink': '#ff1493',
+    'deepskyblue': '#00bfff',
+    'dimgray': '#696969',
+    'dimgrey': '#696969',
+    'dodgerblue': '#1e90ff',
+    'firebrick': '#b22222',
+    'floralwhite': '#fffaf0',
+    'forestgreen': '#228b22',
+    'fuchsia': '#ff00ff',
+    'gainsboro': '#dcdcdc',
+    'ghostwhite': '#f8f8ff',
+    'gold': '#ffd700',
+    'goldenrod': '#daa520',
+    'gray': '#808080',
+    'green': '#008000',
+    'greenyellow': '#adff2f',
+    'grey': '#808080',
+    'honeydew': '#f0fff0',
+    'hotpink': '#ff69b4',
+    'indianred': '#cd5c5c',
+    'indigo': '#4b0082',
+    'ivory': '#fffff0',
+    'khaki': '#f0e68c',
+    'lavender': '#e6e6fa',
+    'lavenderblush': '#fff0f5',
+    'lawngreen': '#7cfc00',
+    'lemonchiffon': '#fffacd',
+    'lightblue': '#add8e6',
+    'lightcoral': '#f08080',
+    'lightcyan': '#e0ffff',
+    'lightgoldenrodyellow': '#fafad2',
+    'lightgray': '#d3d3d3',
+    'lightgreen': '#90ee90',
+    'lightgrey': '#d3d3d3',
+    'lightpink': '#ffb6c1',
+    'lightsalmon': '#ffa07a',
+    'lightseagreen': '#20b2aa',
+    'lightskyblue': '#87cefa',
+    'lightslategray': '#778899',
+    'lightslategrey': '#778899',
+    'lightsteelblue': '#b0c4de',
+    'lightyellow': '#ffffe0',
+    'lime': '#00ff00',
+    'limegreen': '#32cd32',
+    'linen': '#faf0e6',
+    'magenta': '#ff00ff',
+    'maroon': '#800000',
+    'mediumaquamarine': '#66cdaa',
+    'mediumblue': '#0000cd',
+    'mediumorchid': '#ba55d3',
+    'mediumpurple': '#9370db',
+    'mediumseagreen': '#3cb371',
+    'mediumslateblue': '#7b68ee',
+    'mediumspringgreen': '#00fa9a',
+    'mediumturquoise': '#48d1cc',
+    'mediumvioletred': '#c71585',
+    'midnightblue': '#191970',
+    'mintcream': '#f5fffa',
+    'mistyrose': '#ffe4e1',
+    'moccasin': '#ffe4b5',
+    'navajowhite': '#ffdead',
+    'navy': '#000080',
+    'oldlace': '#fdf5e6',
+    'olive': '#808000',
+    'olivedrab': '#6b8e23',
+    'orange': '#ffa500',
+    'orangered': '#ff4500',
+    'orchid': '#da70d6',
+    'palegoldenrod': '#eee8aa',
+    'palegreen': '#98fb98',
+    'paleturquoise': '#afeeee',
+    'palevioletred': '#db7093',
+    'papayawhip': '#ffefd5',
+    'peachpuff': '#ffdab9',
+    'peru': '#cd853f',
+    'pink': '#ffc0cb',
+    'plum': '#dda0dd',
+    'powderblue': '#b0e0e6',
+    'purple': '#800080',
+    'rebeccapurple': '#663399',
+    'red': '#ff0000',
+    'rosybrown': '#bc8f8f',
+    'royalblue': '#4169e1',
+    'saddlebrown': '#8b4513',
+    'salmon': '#fa8072',
+    'sandybrown': '#f4a460',
+    'seagreen': '#2e8b57',
+    'seashell': '#fff5ee',
+    'sienna': '#a0522d',
+    'silver': '#c0c0c0',
+    'skyblue': '#87ceeb',
+    'slateblue': '#6a5acd',
+    'slategray': '#708090',
+    'slategrey': '#708090',
+    'snow': '#fffafa',
+    'springgreen': '#00ff7f',
+    'steelblue': '#4682b4',
+    'tan': '#d2b48c',
+    'teal': '#008080',
+    'thistle': '#d8bfd8',
+    'tomato': '#ff6347',
+    'turquoise': '#40e0d0',
+    'violet': '#ee82ee',
+    'wheat': '#f5deb3',
+    'white': '#ffffff',
+    'whitesmoke': '#f5f5f5',
+    'yellow': '#ffff00',
+    'yellowgreen': '#9acd32',
+}
 
 def debug(view, msg):
     if not DEBUG:
@@ -40,17 +278,18 @@ def debug(view, msg):
     }))
 
 
-def get_regex_obj(regex_string):
+def get_regex_obj(regex_string, flags=0):
     """
     @brief Get the regular expression object.
 
     @param regex_string the regular expression string
+    @param flags        the regular expression flags
 
     @return The regular expression object.
     """
 
     if regex_string not in regex_obj_cache:
-        regex_obj_cache[regex_string] = re.compile(regex_string)
+        regex_obj_cache[regex_string] = re.compile(regex_string, flags)
 
     return regex_obj_cache[regex_string]
 
@@ -105,34 +344,171 @@ def ansi_definitions(content=None):
 
 
 def get_color_index(name):
-    color_names = (
-        None,
-        'black',
-        'red',
-        'green',
-        'yellow',
-        'blue',
-        'magenta',
-        'cyan',
-        'white',
-        'black_light',
-        'red_light',
-        'green_light',
-        'yellow_light',
-        'blue_light',
-        'magenta_light',
-        'cyan_light',
-        'white_light'
-    )
-    return color_names.index(name) if name in color_names else 0
+    return ANSI_COLORS_NAME.index(name) + 1 if name in ANSI_COLORS_NAME else 0
 
 
-def get_scope(d):
+def get_scope(flags):
     return "f{0}_b{1}_d{2}".format(
-        get_color_index(d['foreground']) if 'foreground' in d else 0,
-        get_color_index(d['background']) if 'background' in d else 0,
-        1 if 'dim' in d else 0
+        get_color_index(flags['foreground']) if 'foreground' in flags else 0,
+        get_color_index(flags['background']) if 'background' in flags else 0,
+        1 if 'dim' in flags else 0
     )
+
+
+def reduce_to_ansi(seq, supported_rgb):
+    r256 = r'\b(?:[0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5])\b'  # 0..255
+
+    regex_ansi_8bit = get_regex_obj(r'\b((?P<fg>38)|48);5;(?P<color>{0})'.format(r256))
+    seq = regex_ansi_8bit.sub(
+        lambda m: get_ansi_8bit_escape_sequence(
+            find_closest_color(
+                ansi_8bit_to_rgb(int(m.groupdict()['color'])),
+                supported_rgb
+            ),
+            m.groupdict()['fg']
+        ),
+        seq
+    )
+
+    regex_ansi_16bit = get_regex_obj(r'\b((?P<fg>38)|48);2;(?P<red>{0});(?P<green>{0});(?P<blue>{0})'.format(r256))
+    seq = regex_ansi_16bit.sub(
+        lambda m: get_ansi_8bit_escape_sequence(
+            find_closest_color(
+                (int(m.groupdict()['red']), int(m.groupdict()['green']), int(m.groupdict()['blue'])),
+                supported_rgb
+            ),
+            m.groupdict()['fg']
+        ),
+        seq
+    )
+
+    return seq
+
+
+def get_ansi_8bit_escape_sequence(color_name, is_foreground):
+    return str(SEQUENCES['foreground' if is_foreground else 'background'][color_name][0])
+
+
+def ansi_8bit_to_rgb(num):
+    # handle greyscale
+    if num >= 232:
+        c = (num - 232) * 10 + 8
+        return (c, c, c)
+
+    num -= 16
+    return (
+        int(num / 36) / 5 * 255,
+        int((num % 36) / 6) / 5 * 255,
+        (num % 6) / 5 * 255
+    )
+
+
+def parse_color_to_rgb(value):
+    """
+    @brief HEX, RGB, HSL and CSS colors to RGBA tuple.
+
+    @param value string
+
+    @return (red, green, blue, alpha)
+    """
+
+    hex_to_dec = lambda c: int(((c or '0') + (c or '0'))[:2], 16)
+
+    REGEX_HEX_SHORT = r'^\s*#(?P<red>{0})(?P<green>{0})(?P<blue>{0})(?P<alpha>{0})?\s*$'.format(REGEX_RANGE_0_F)
+    m = re.match(get_regex_obj(REGEX_HEX_SHORT, flags=re.IGNORECASE), value)
+    if m:
+        m = m.groupdict()
+        return (
+            hex_to_dec(m['red']),
+            hex_to_dec(m['green']),
+            hex_to_dec(m['blue']),
+            hex_to_dec(m['alpha']) / 255
+        )
+
+    REGEX_HEX_FULL = r'^\s*#(?P<red>{0}{0})(?P<green>{0}{0})(?P<blue>{0}{0})(?P<alpha>{0}{0})?\s*$'.format(REGEX_RANGE_0_F)
+    m = re.match(get_regex_obj(REGEX_HEX_FULL, flags=re.IGNORECASE), value)
+    if m:
+        m = m.groupdict()
+        return (
+            hex_to_dec(m['red']),
+            hex_to_dec(m['green']),
+            hex_to_dec(m['blue']),
+            hex_to_dec(m['alpha']) / 255
+        )
+
+    REGEX_RGBA = r'^\s*rgba?\(\s*(?P<red>{0})\s*,\s*(?P<green>{0})\s*,\s*(?P<blue>{0})\s*(,\s*(?P<alpha>{1})\s*)?\)\s*$'.format(REGEX_RANGE_0_255, REGEX_RANGE_0_1_FLOAT)
+    m = re.match(get_regex_obj(REGEX_RGBA, flags=re.IGNORECASE), value)
+    if m:
+        m = m.groupdict()
+        return (
+            int(m['red']),
+            int(m['green']),
+            int(m['blue']),
+            float(m['alpha'] or 0)
+        )
+
+    REGEX_HSLA = r'^\s*hsla?\s*\(\s*(?P<hue>{0})\s*,\s*(?P<saturation>0|({1}%))\s*,\s*(?P<light>0|({1}%))\s*(,\s*(?P<alpha>{2}))?\s*\)'.format(REGEX_RANGE_0_360, REGEX_RANGE_0_100, REGEX_RANGE_0_1_FLOAT)
+    m = re.match(get_regex_obj(REGEX_RGBA, flags=re.IGNORECASE), value)
+    if m:
+        m = m.groupdict()
+        rgb = hsl_to_rgb((int(m['hue']), int(m['saturation'].rstrip('%')), int(m['light'].rstrip('%'))))
+        return rgb + (float(m['alpha'] or 0))
+
+    value = value.strip().lower()
+    if value in CSS_COLORS.keys():
+        return parse_color_to_rgb(CSS_COLORS[value])
+
+
+def hsl_to_rgb(hsl):
+    hue = hsl[0] / 360
+    saturation = hsl[1] / 100
+    light = hsl[2] / 100
+
+    if saturation == 0:
+        val = light * 255
+        return (val, val, val)
+
+    if light < 0.5:
+        t2 = light * (1 + saturation)
+    else:
+        t2 = light + saturation - light * saturation
+
+    t1 = 2 * light - t2
+
+    rgb = (0, 0, 0)
+    for i in range(3):
+        t3 = hue + 1 / 3 * -(i - 1)
+        if t3 < 0: t3 += 1
+        if t3 > 1: t3 -= 1
+
+        if 6 * t3 < 1:
+            val = t1 + (t2 - t1) * 6 * t3
+        elif 2 * t3 < 1:
+            val = t2
+        elif 3 * t3 < 2:
+            val = t1 + (t2 - t1) * (2 / 3 - t3) * 6
+        else:
+            val = t1
+
+        rgb[i] = val * 255
+
+    return rgb
+
+
+def find_closest_color(rgb, supported_rgb):
+    d = {k: euclidean_distance(v, rgb) for k, v in supported_rgb.items()}
+    return min(d, key=d.get)
+
+
+def euclidean_distance(a, b):
+    """
+    @brief Calculate Euclidean distance between 2 RGB colors.
+    """
+
+    dr = (a[0] - b[0]) * (a[0] - b[0])
+    dg = (a[1] - b[1]) * (a[1] - b[1])
+    db = (a[2] - b[2]) * (a[2] - b[2])
+    return dr + dg + db
 
 
 class AnsiRegion(object):
@@ -219,70 +595,10 @@ class AnsiCommand(sublime_plugin.TextCommand):
     def _colorize_ansi_codes(self, edit):
         view = self.view
 
-        SEQUENCES = (
-            # (flag, (
-            #     (value, code_on, (code_off))
-            # ))
-            ('bold', (
-                ('bold', 1, (0, 21, 22)),
-            )),
-            ('dim', (
-                ('dim', 2, (0, 22)),
-            )),
-            ('italic', (
-                ('italic', 3, (0, 23)),
-            )),
-            ('underline', (
-                ('underline', 4, (0, 24)),
-            )),
-            ('inverse', (
-                ('inverse', 7, (0, 27)),
-            )),
-            ('hidden', (
-                ('hidden', 8, (0, 28)),
-            )),
-            ('strikethrough', (
-                ('strikethrough', 9, (0, 29)),
-            )),
-            ('foreground', (
-                ('black', 30, (0, 39)),
-                ('red', 31, (0, 39)),
-                ('green', 32, (0, 39)),
-                ('yellow', 33, (0, 39)),
-                ('blue', 34, (0, 39)),
-                ('magenta', 35, (0, 39)),
-                ('cyan', 36, (0, 39)),
-                ('white', 37, (0, 39)),
-                ('black_light', 90, (0, 39)),
-                ('red_light', 91, (0, 39)),
-                ('green_light', 92, (0, 39)),
-                ('yellow_light', 93, (0, 39)),
-                ('blue_light', 94, (0, 39)),
-                ('magenta_light', 95, (0, 39)),
-                ('cyan_light', 96, (0, 39)),
-                ('white_light', 97, (0, 39)),
-            )),
-            ('background', (
-                ('black', 40, (0, 49)),
-                ('red', 41, (0, 49)),
-                ('green', 42, (0, 49)),
-                ('yellow', 43, (0, 49)),
-                ('blue', 44, (0, 49)),
-                ('magenta', 45, (0, 49)),
-                ('cyan', 46, (0, 49)),
-                ('white', 47, (0, 49)),
-                ('black_light', 100, (0, 49)),
-                ('red_light', 101, (0, 49)),
-                ('green_light', 102, (0, 49)),
-                ('yellow_light', 103, (0, 49)),
-                ('blue_light', 104, (0, 49)),
-                ('magenta_light', 105, (0, 49)),
-                ('cyan_light', 106, (0, 49)),
-                ('white_light', 107, (0, 49)),
-            ))
-        )
-
         ansi_codes = fast_view_find_all(view, r'\x1b\[([0-9;]*)m')
+
+        settings = sublime.load_settings("ansi.sublime-settings")
+        ANSI_COLORS_RGB = {k: parse_color_to_rgb(v) for k, v in settings.get('ANSI_COLORS', {}).items()}
 
         # collect ansi regions
         ansi_regions = {
@@ -306,10 +622,11 @@ class AnsiCommand(sublime_plugin.TextCommand):
             text_length += this_text_length
             seq_length += this_seq_length
 
+            codes = reduce_to_ansi(codes, ANSI_COLORS_RGB)
             codes = map(int, filter(None, codes.split(';')))
             for code in codes:
-                for flag, variants in SEQUENCES:
-                    for value, code_on, code_off in variants:
+                for flag, variants in SEQUENCES.items():
+                    for value, (code_on, code_off) in variants.items():
                         if code == code_on:
                             flags[flag] = value
                         elif code in code_off:
