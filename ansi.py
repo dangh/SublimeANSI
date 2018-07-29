@@ -21,7 +21,7 @@ REGEX_RANGE_0_1_FLOAT = r'((\.\d+)|(0(\.\d+))|(1(\.0+)?))'  # 0..1
 REGEX_RANGE_0_100 = r'0+|(0*[0-9])|(0*[1-9][0-9])|100'  # 0%..100%
 REGEX_RANGE_0_360 = r'0+|(0*[0-9])|(0*[1-9][0-9])|(0*[1-2][0-9][0-9])|(0*3[0-5][0-9])|(0*360)'
 
-ANSI_COLORS_NAME = (
+ANSI_NAMES = (
     'black',
     'red',
     'green',
@@ -345,14 +345,14 @@ def ansi_definitions(content=None):
 
 
 def get_color_index(name):
-    return ANSI_COLORS_NAME.index(name) + 1 if name in ANSI_COLORS_NAME else 0
+    return ANSI_NAMES.index(name) + 1 if name in ANSI_NAMES else 0
 
 
 def get_scope(flags):
-    return "f{0}_b{1}_d{2}".format(
-        get_color_index(flags['foreground']) if 'foreground' in flags else 0,
-        get_color_index(flags['background']) if 'background' in flags else 0,
-        1 if 'dim' in flags else 0
+    return "c{0}_c{1}_{2}".format(
+        get_color_index(flags['foreground']) if 'foreground' in flags else 'F',
+        get_color_index(flags['background']) if 'background' in flags else 'B',
+        'd' if 'dim' in flags else ''
     )
 
 
@@ -882,19 +882,8 @@ def adjust_to_diff(color):
     but still close enough so the human eye cannot distinguise.
     """
 
-    # RGB format
-    m = re.match(r'^#([0-9a-fA-F])([0-9a-fA-F])([0-9a-fA-F])$', color)
-    if m:
-        r, g, b = g.groups()
-        return '#{0}{0}{1}{1}{2}{3}'.format(r, g, b, '1' if b == '0' else chr(ord(b) - 1))
-
-    # RRGGBB format
-    m = re.match(r'^#([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F])([0-9a-fA-F])$', color)
-    if m:
-        rr, gg, b1, b2 = m.groups()
-        return '#{0}{1}{2}{3}'.format(rr, gg, b1, '1' if b2 == '0' else chr(ord(b2) - 1))
-
-    return color
+    r, g, b, a = parse_color_to_rgb(color)
+    return 'rgb({0},{1},{2})'.format(r, g-1 if g else 1, b)
 
 
 def generate_color_scheme(cs_file, settings):
@@ -904,29 +893,29 @@ def generate_color_scheme(cs_file, settings):
     GENERAL = settings.get('GENERAL', {})
     OTHERS = settings.get('OTHERS', {})
     HIGHLIGHT = settings.get('HIGHLIGHT', [])
+    dim = lambda c: 'color({0} alpha({1}))'.format(c, OTHERS['dim_alpha'])
+    default_fg = GENERAL['foreground'] or ANSI_COLORS['white']
+    default_bg = adjust_to_diff(GENERAL['background'] or ANSI_COLORS['black'])
     scheme = {
         'name': 'ANSI',
         'variables': {
-            'cF': GENERAL['foreground'] or ANSI_COLORS['white'],
-            'cB': adjust_to_diff(GENERAL['background'] or ANSI_COLORS['black']),
+            'cF': default_fg,
+            'cFd': dim(default_fg),
+            'cB': default_bg,
         },
         'globals': GENERAL,
         'rules': []
     }
-    for name, color in ANSI_COLORS.items():
-        scheme['variables']['c{0}'.format(get_color_index(name))] = color
-    for fg in range(17):
-        fg_var = 'var(c{0})'.format(fg) if fg else 'var(cF)'
-        for bg in range(17):
-            bg_var = 'var(c{0})'.format(bg) if bg else 'var(cB)'
-            for dim in [0, 1]:
-                fg_var_adjusted = fg_var
-                if dim and OTHERS['dim_alpha']:
-                    fg_var_adjusted = 'color({0}a({1}))'.format(fg_var, OTHERS['dim_alpha'])
+    for idx, color in [(x, ANSI_COLORS[ANSI_NAMES[x-1]]) for x in range(1, 17)]:
+        scheme['variables']['c{0}'.format(idx)] = color
+        scheme['variables']['c{0}d'.format(idx)] = dim(color)
+    for fg in ('F',) + tuple(range(1, 17)):
+        for bg in ('B',) + tuple(range(1, 17)):
+            for dim in ['', 'd']:
                 scheme['rules'].append({
-                    'scope': 'f{0}_b{1}_d{2}'.format(fg, bg, dim),
-                    'foreground': fg_var_adjusted,
-                    'background': bg_var
+                    'scope': 'c{0}_c{1}_{2}'.format(fg, bg, dim),
+                    'foreground': 'var(c{0}{1})'.format(fg, dim),
+                    'background': 'var(c{0})'.format(bg)
                 })
     h = 0
     for rule in HIGHLIGHT:
