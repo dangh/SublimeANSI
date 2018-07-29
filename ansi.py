@@ -888,14 +888,33 @@ def adjust_to_diff(color):
 
 def generate_color_scheme(cs_file, settings):
     print("Regenerating ANSI color scheme...")
+
     settings = sublime.load_settings("ansi.sublime-settings")
     ANSI_COLORS = settings.get('ANSI_COLORS', {})
-    GENERAL = settings.get('GENERAL', {})
-    OTHERS = settings.get('OTHERS', {})
+    ANSI_dim_alpha = settings.get('ANSI_dim_alpha', 0.7)
     HIGHLIGHT = settings.get('HIGHLIGHT', [])
-    dim = lambda c: 'color({0} alpha({1}))'.format(c, OTHERS['dim_alpha'])
-    default_fg = GENERAL['foreground'] or ANSI_COLORS['white']
-    default_bg = adjust_to_diff(GENERAL['background'] or ANSI_COLORS['black'])
+    GENERAL = settings.get('GENERAL', {})
+
+    dim = lambda color, alpha=ANSI_dim_alpha: 'color({0} alpha({1}))'.format(color, alpha)
+
+    if 'foreground' not in GENERAL:
+        GENERAL['foreground'] = ANSI_COLORS['white'] or '#fff'
+    if 'background' not in GENERAL:
+        GENERAL['background'] = ANSI_COLORS['black'] or '#000'
+    if 'gutter' not in GENERAL:
+        GENERAL['gutter'] = GENERAL['background']
+    if 'gutter_foreground' not in GENERAL:
+        GENERAL['gutter_foreground'] = dim(GENERAL['foreground'], 0.5)
+    if 'caret' not in GENERAL:
+        GENERAL['caret'] = ANSI_COLORS['white_light']
+    if 'selection' not in GENERAL:
+        GENERAL['selection'] = dim(ANSI_COLORS['white_light'], 0.2)
+    if 'line_highlight' not in GENERAL:
+        GENERAL['line_highlight'] = dim(ANSI_COLORS['white_light'], 0.25)
+
+    default_fg = GENERAL['foreground']
+    default_bg = adjust_to_diff(GENERAL['background'])
+
     scheme = {
         'name': 'ANSI',
         'variables': {

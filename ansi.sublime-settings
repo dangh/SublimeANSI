@@ -18,29 +18,22 @@
         "white_light":   "#ffffff",
     },
 
-    // these values will be put directly to the `globals` section in the .sublime-color-scheme file
-    // see: https://www.sublimetext.com/docs/3/color_schemes.html#global_settings
-    "GENERAL": {
-        "background":        "#010101",
-        "foreground":        "#cccccc",
-        "caret":             "#FF5E00",
-        "gutter":            "#000000",
-        "gutter_foreground": "#FFFFFF55",
-        "invisibles":        "#FFFFFF00",
-        "selection":         "#FFFFFF33",
-        "line_highlight":    "#FFFFFF00",
-    },
+    // alpha adjustment for the dimmed text, from 0.0 to 1.0
+    // see: https://www.sublimetext.com/docs/3/color_schemes.html#colors
+    "ANSI_dim_alpha": 0.7,
 
+    // custom foreground/background highlighting with regular expression
+    // the highlight will override whatever foreground/background colors
+    // of the escaped ANSI.
     "HIGHLIGHT": [
         {"regex": "\\berror\\b", "foreground": "red"},
         {"regex": "\\bwarn(ing)\\b", "foreground": "darkgoldenrod"},
         {"regex": "\\bsuccess|ok\\b", "foreground": "limegreen"},
     ],
 
-    "OTHERS": {
-        // alpha adjuster for the dimmed text, from 0.0 to 1.0
-        // see: https://www.sublimetext.com/docs/3/color_schemes.html#colors
-        "dim_alpha": 0.7,
+    // these values will be put directly to the `globals` section in the .sublime-color-scheme file
+    // see: https://www.sublimetext.com/docs/3/color_schemes.html#global_settings
+    "GENERAL": {
     },
 
     // when to process ANSI encoded string
