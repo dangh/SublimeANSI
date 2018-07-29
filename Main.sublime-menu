@@ -13,19 +13,11 @@
                 [
                     {
                         "caption": "sublime-ansi",
-                        "children":
-                        [
-                            {
-                                "command": "open_file",
-                                "args": {"file": "${packages}/sublime-ansi/ansi.sublime-settings"},
-                                "caption": "Settings – Default"
-                            },
-                            {
-                                "command": "open_file",
-                                "args": {"file": "${packages}/User/ansi.sublime-settings"},
-                                "caption": "Settings – User"
-                            }
-                        ]
+                        "command": "edit_settings",
+                        "args": {
+                            "base_file": "${packages}/sublime-ansi/ansi.sublime-settings",
+                            "default": "// Your settings for sublime-ansi. See the default file to see the different options. \n{\n\t$0\n}\n"
+                        }
                     }
                 ]
             }
