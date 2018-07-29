@@ -886,6 +886,15 @@ def adjust_to_diff(color):
     return 'rgb({0},{1},{2})'.format(r, g-1 if g else 1, b)
 
 
+def merge_dict(*argv):
+    r = {}
+    for d in argv:
+        for k, v in d.items():
+            if k not in r or v:
+                r[k] = v
+    return r
+
+
 def generate_color_scheme(cs_file, settings):
     print("Regenerating ANSI color scheme...")
 
@@ -897,20 +906,6 @@ def generate_color_scheme(cs_file, settings):
 
     dim = lambda color, alpha=ANSI_dim_alpha: 'color({0} alpha({1}))'.format(color, alpha)
 
-    if 'foreground' not in GENERAL:
-        GENERAL['foreground'] = ANSI_COLORS['white'] or '#fff'
-    if 'background' not in GENERAL:
-        GENERAL['background'] = ANSI_COLORS['black'] or '#000'
-    if 'gutter' not in GENERAL:
-        GENERAL['gutter'] = GENERAL['background']
-    if 'gutter_foreground' not in GENERAL:
-        GENERAL['gutter_foreground'] = dim(GENERAL['foreground'], 0.5)
-    if 'caret' not in GENERAL:
-        GENERAL['caret'] = ANSI_COLORS['white_light']
-    if 'selection' not in GENERAL:
-        GENERAL['selection'] = dim(ANSI_COLORS['white_light'], 0.2)
-    if 'line_highlight' not in GENERAL:
-        GENERAL['line_highlight'] = dim(ANSI_COLORS['white_light'], 0.25)
 
     default_fg = GENERAL['foreground']
     default_bg = adjust_to_diff(GENERAL['background'])
@@ -922,7 +917,18 @@ def generate_color_scheme(cs_file, settings):
             'cFd': dim(default_fg),
             'cB': default_bg,
         },
-        'globals': GENERAL,
+        'globals': merge_dict({
+            'gutter': GENERAL['background'],
+            'gutter_foreground': dim(GENERAL['foreground'], 0.5),
+            'caret': dim(GENERAL['foreground'], 0.7),
+            'selection': dim(ANSI_COLORS['white_light'], 0.2),
+            'line_highlight': dim(ANSI_COLORS['white_light'], 0.25),
+            'selection_corner_style': 'square',
+            'selection_border_width': '0',
+            'guide': GENERAL['background'],
+            'active_guide': GENERAL['background'],
+            'stack_guide': GENERAL['background'],
+        }, GENERAL),
         'rules': []
     }
     for idx, color in [(x, ANSI_COLORS[ANSI_NAMES[x-1]]) for x in range(1, 17)]:
