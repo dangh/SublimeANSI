@@ -413,7 +413,7 @@ def parse_color_to_rgb(value):
     @return (red, green, blue, alpha)
     """
 
-    hex_to_dec = lambda c: int(((c or '0') + (c or '0'))[:2], 16)
+    hex_to_dec = lambda c: int(((c or 'F') + (c or 'F'))[:2], 16)
 
     REGEX_HEX_SHORT = r'^\s*#(?P<red>{0})(?P<green>{0})(?P<blue>{0})(?P<alpha>{0})?\s*$'.format(REGEX_RANGE_0_F)
     m = re.match(get_regex_obj(REGEX_HEX_SHORT, flags=re.IGNORECASE), value)
@@ -445,7 +445,7 @@ def parse_color_to_rgb(value):
             int(m['red']),
             int(m['green']),
             int(m['blue']),
-            float(m['alpha'] or 0)
+            float(m['alpha'] or 1)
         )
 
     REGEX_HSLA = r'^\s*hsla?\s*\(\s*(?P<hue>{0})\s*,\s*(?P<saturation>0|({1}%))\s*,\s*(?P<light>0|({1}%))\s*(,\s*(?P<alpha>{2}))?\s*\)'.format(REGEX_RANGE_0_360, REGEX_RANGE_0_100, REGEX_RANGE_0_1_FLOAT)
@@ -453,7 +453,7 @@ def parse_color_to_rgb(value):
     if m:
         m = m.groupdict()
         rgb = hsl_to_rgb((int(m['hue']), int(m['saturation'].rstrip('%')), int(m['light'].rstrip('%'))))
-        return rgb + (float(m['alpha'] or 0))
+        return rgb + (float(m['alpha'] or 1))
 
     value = value.strip().lower()
     if value in CSS_COLORS.keys():
