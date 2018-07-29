@@ -496,6 +496,14 @@ def hsl_to_rgb(hsl):
     return rgb
 
 
+def rgb_to_hex(rgba):
+    r, g, b, a = rgba
+    rgb = '#{:02x}{:02x}{:02x}'.format(r, g, b)
+    if a < 1:
+        rgb += '{:02x}'.format(int(a * 255))
+    return rgb
+
+
 def find_closest_color(rgb, supported_rgb):
     d = {k: euclidean_distance(v, rgb) for k, v in supported_rgb.items()}
     return min(d, key=d.get)
@@ -873,7 +881,7 @@ class AnsiColorBuildCommand(Default.exec.ExecCommand):
                 view.run_command("ansi", args={"clear_before": True})
 
 
-def adjust_to_diff(color):
+def adjust_to_diff(color, base):
     """
     If we draw the region with the same background as the theme background,
     sublime will use foreground color as background, which is undesirable.
@@ -882,8 +890,16 @@ def adjust_to_diff(color):
     but still close enough so the human eye cannot distinguise.
     """
 
-    r, g, b, a = parse_color_to_rgb(color)
-    return 'rgb({0},{1},{2})'.format(r, g-1 if g else 1, b)
+    color = parse_color_to_rgb(color)
+    base = parse_color_to_rgb(base)
+    if color != base: return rgb_to_hex(color)
+
+    return rgb_to_hex((
+        color[0],
+        color[1],
+        color[2] - 1 if color[2] else 1,
+        color[3]
+    ))
 
 
 def merge_dict(*argv):
@@ -898,42 +914,48 @@ def merge_dict(*argv):
 def generate_color_scheme(cs_file, settings):
     print("Regenerating ANSI color scheme...")
 
-    settings = sublime.load_settings("ansi.sublime-settings")
     ANSI_COLORS = settings.get('ANSI_COLORS', {})
     ANSI_dim_alpha = settings.get('ANSI_dim_alpha', 0.7)
     HIGHLIGHT = settings.get('HIGHLIGHT', [])
-    GENERAL = settings.get('GENERAL', {})
+    GENERAL = merge_dict({
+        'foreground': ANSI_COLORS['white'] or '#fff',
+        'background': ANSI_COLORS['black'] or '#000'
+    }, settings.get('GENERAL', {}))
+
+    view_fg = GENERAL['foreground']
+    view_bg = GENERAL['background']
+
+    # FIX: reverted color when painting black background
+    ANSI_COLORS['black'] = adjust_to_diff(ANSI_COLORS['black'], view_bg)
 
     dim = lambda color, alpha=ANSI_dim_alpha: 'color({0} alpha({1}))'.format(color, alpha)
-
-
-    default_fg = GENERAL['foreground']
-    default_bg = adjust_to_diff(GENERAL['background'])
 
     scheme = {
         'name': 'ANSI',
         'variables': {
-            'cF': default_fg,
-            'cFd': dim(default_fg),
-            'cB': default_bg,
+            'cF': view_fg,
+            'cFd': dim(view_fg),
+
+            # FIX: reverted color when painting transparent background
+            'cB': adjust_to_diff(view_bg, view_bg),
         },
         'globals': merge_dict({
-            'gutter': GENERAL['background'],
-            'gutter_foreground': dim(GENERAL['foreground'], 0.5),
-            'caret': dim(GENERAL['foreground'], 0.7),
+            'gutter': view_bg,
+            'gutter_foreground': dim(view_fg, 0.5),
+            'caret': dim(view_fg, 0.7),
             'selection': dim(ANSI_COLORS['white_light'], 0.2),
             'line_highlight': dim(ANSI_COLORS['white_light'], 0.25),
             'selection_corner_style': 'square',
             'selection_border_width': '0',
-            'guide': GENERAL['background'],
-            'active_guide': GENERAL['background'],
-            'stack_guide': GENERAL['background'],
+            'guide': view_bg,
+            'active_guide': view_bg,
+            'stack_guide': view_bg,
         }, GENERAL),
         'rules': []
     }
-    for idx, color in [(x, ANSI_COLORS[ANSI_NAMES[x-1]]) for x in range(1, 17)]:
-        scheme['variables']['c{0}'.format(idx)] = color
-        scheme['variables']['c{0}d'.format(idx)] = dim(color)
+    for i in range(16):
+        scheme['variables']['c{0}'.format(i+1)] = ANSI_COLORS[ANSI_NAMES[i]]
+        scheme['variables']['c{0}d'.format(i+1)] = dim(ANSI_COLORS[ANSI_NAMES[i]])
     for fg in ('F',) + tuple(range(1, 17)):
         for bg in ('B',) + tuple(range(1, 17)):
             for dim in ['', 'd']:
