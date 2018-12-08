@@ -15,7 +15,7 @@ if __name__ == '__main__':
     if len(sys.argv) > 1:
         ansi_file = sys.argv[1]
     else:
-        ansi_file = "ansi_test_file.txt"
+        ansi_file = "ansi_test_file.ansi"
 
     print('=========================')
     print(' ANSI TEST BUILD STARTED ')

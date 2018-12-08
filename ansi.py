@@ -10,7 +10,9 @@ import re
 import sublime
 import sublime_plugin
 
-DEBUG = False
+print(os.environ)
+
+DEBUG = True
 
 AnsiDefinition = namedtuple("AnsiDefinition", "scope regex")
 regex_obj_cache = {}
@@ -19,7 +21,9 @@ REGEX_RANGE_0_F = r'[0-9a-fA-F]'
 REGEX_RANGE_0_255 = r'\b([0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5])\b'  # 0..255
 REGEX_RANGE_0_1_FLOAT = r'((\.\d+)|(0(\.\d+))|(1(\.0+)?))'  # 0..1
 REGEX_RANGE_0_100 = r'0+|(0*[0-9])|(0*[1-9][0-9])|100'  # 0%..100%
-REGEX_RANGE_0_360 = r'0+|(0*[0-9])|(0*[1-9][0-9])|(0*[1-2][0-9][0-9])|(0*3[0-5][0-9])|(0*360)'
+REGEX_RANGE_0_360 = (
+    r'0+|(0*[0-9])|(0*[1-9][0-9])|(0*[1-2][0-9][0-9])|(0*3[0-5][0-9])|(0*360)'
+)
 
 ANSI_NAMES = (
     'black',
@@ -44,27 +48,13 @@ SEQUENCES = {
     # {flag, {
     #     value: (code_on, (code_off))
     # }}
-    'bold': {
-        'bold': (1, (0, 21, 22)),
-    },
-    'dim': {
-        'dim': (2, (0, 22)),
-    },
-    'italic': {
-        'italic': (3, (0, 23)),
-    },
-    'underline': {
-        'underline': (4, (0, 24)),
-    },
-    'inverse': {
-        'inverse': (7, (0, 27)),
-    },
-    'hidden': {
-        'hidden': (8, (0, 28)),
-    },
-    'strikethrough': {
-        'strikethrough': (9, (0, 29)),
-    },
+    'bold': {'bold': (1, (0, 21, 22))},
+    'dim': {'dim': (2, (0, 22))},
+    'italic': {'italic': (3, (0, 23))},
+    'underline': {'underline': (4, (0, 24))},
+    'inverse': {'inverse': (7, (0, 27))},
+    'hidden': {'hidden': (8, (0, 28))},
+    'strikethrough': {'strikethrough': (9, (0, 29))},
     'foreground': {
         'black': (30, (0, 39)),
         'red': (31, (0, 39)),
@@ -254,6 +244,7 @@ CSS_COLORS = {
     'yellowgreen': '#9acd32',
 }
 
+
 def debug(view, msg):
     if not DEBUG:
         return
@@ -268,14 +259,26 @@ def debug(view, msg):
         name = "not named"
     msg = re.sub(r'\n', "\n\t", msg)
 
-    print("File: \"{path}\", line {lineno}, window: {window_id}, view: {view_id}, file: {name}\n\t{msg}".format_map({
-        'lineno': info.lineno,
-        'msg': msg,
-        'name': name,
-        'path': filepath,
-        'view_id': view.id(),
-        'window_id': view.window().id(),
-    }))
+    print(
+        "File: \"{path}\", line {lineno}, window: {window_id}, view: {view_id}, file: {name}\n\t{msg}".format_map(
+            {
+                'lineno': info.lineno,
+                'msg': msg,
+                'name': name,
+                'path': filepath,
+                'view_id': view.id(),
+                'window_id': view.window().id(),
+            }
+        )
+    )
+
+
+def get_settings(name, default):
+    settings = sublime.load_settings("ansi.sublime-settings")
+    result = settings.get(name, default)
+    if type(default) is dict:
+        result = merge_dict(default, result)
+    return result
 
 
 def get_regex_obj(regex_string, flags=0):
@@ -294,54 +297,95 @@ def get_regex_obj(regex_string, flags=0):
     return regex_obj_cache[regex_string]
 
 
-def fast_view_find_all(view, regex_string, flags=0):
-    """
-    @brief A faster implementation of View.find_all().
-
-    @param view         the View object
-    @param regex_string the regular expression string
-    @param flags        the regular expression flags
-
-    @return (sublime.Region, maching groups)[]
-    """
-
-    regex_obj = get_regex_obj(regex_string)
-    content = view.substr(sublime.Region(0, view.size()))
-
-    iterator = regex_obj.finditer(content)
-
-    if iterator is None:
+def find_all(content, regex_string, flags=0):
+    if not content:
         return []
+    iterator = get_regex_obj(regex_string, flags).finditer(content)
+    return [(m.span(), m.groups()) for m in iterator]
 
-    return [(sublime.Region(*(m.span())),) + m.groups() for m in iterator]
 
+def ansi_regions(content=None):
+    """
+    @brief Find all text regions in the provided content.
+           All the regions are adjusted as after stripped out the escape sequences.
 
-def ansi_definitions(content=None):
+    @param content the content string
 
-    settings = sublime.load_settings("ansi.sublime-settings")
+    @return { scope: sublime.Region[] }
+    """
+
+    # collect ansi regions
+    regions = {
+        # scope: regions,
+    }
 
     if content is None:
-        bgs = settings.get('ANSI_BG', [])
-        fgs = settings.get('ANSI_FG', [])
-    else:
-        # collect colors from file content and make them a string
-        color_str = "{0}{1}{0}".format(
-            '\x1b',
-            '\x1b'.join(set(
-                # find all possible colors
-                re.findall(r'\[[0-9;]*m', content)
-            ))
-        )
+        # returns dictionary with all the possible scopes
+        for fg in range(17):
+            for bg in range(17):
+                for dim in ('', 'd'):
+                    scope = 'c{0}_c{1}_{2}'.format(fg, bg, dim)
+                    regions[scope] = []
 
-        # filter out unnecessary colors in user settings
-        bgs = [v for v in settings.get('ANSI_BG', []) if get_regex_obj(v['code']).search(color_str) is not None]
-        fgs = [v for v in settings.get('ANSI_FG', []) if get_regex_obj(v['code']).search(color_str) is not None]
+    ansi_codes = find_all(content, r'\x1b\[([0-9;]*)m')
 
-    for bg in bgs:
-        for fg in fgs:
-            regex = r'(?:{0}{1}|{1}{0})[^\x1b]*'.format(fg['code'], bg['code'])
-            scope = "{0}{1}".format(fg['scope'], bg['scope'])
-            yield AnsiDefinition(scope, regex)
+    ANSI_COLORS_RGB = {
+        k: parse_color_to_rgb(v) for k, v in get_settings('ANSI_COLORS', {}).items()
+    }
+
+    text_length = 0  # length of all ansi text
+    seq_length = 0  # length of all escaped sequences
+    flags = {}
+    for (a, b), (codes,) in ansi_codes:
+        this_text_length = a - (text_length + seq_length)
+        this_seq_length = b - a
+        if this_text_length:
+            text_region = (text_length, text_length + this_text_length)
+            scope = get_scope(flags)
+            if scope not in regions:
+                regions[scope] = []
+            regions[scope].append(text_region)
+
+        text_length += this_text_length
+        seq_length += this_seq_length
+
+        codes = reduce_to_ansi(codes, ANSI_COLORS_RGB)
+        codes = map(int, filter(None, codes.split(';')))
+        for code in codes:
+            for flag, variants in SEQUENCES.items():
+                for value, (code_on, code_off) in variants.items():
+                    if code == code_on:
+                        flags[flag] = value
+                    elif code in code_off:
+                        flags.pop(flag, None)
+
+    # add the ending ansi text
+    last_text_length = len(content) - (text_length + seq_length)
+    if last_text_length:
+        text_region = (text_length, text_length + last_text_length)
+        scope = get_scope(flags)
+        if scope not in regions:
+            regions[scope] = []
+        regions[scope].append(text_region)
+
+    return regions
+
+
+def highlight_regions(content=None):
+    regions = {}
+    HIGHLIGHT = get_settings('HIGHLIGHT', [])
+
+    if content is None:
+        for i in range(len(HIGHLIGHT)):
+            regions['h{0}'.format(i + 1)] = []
+        return regions
+
+    for i in range(len(HIGHLIGHT)):
+        scope = 'h{0}'.format(i + 1)
+        rule = HIGHLIGHT[i]
+        regions[scope] = [r for r, _ in find_all(content, rule['regex'], re.IGNORECASE)]
+
+    return regions
 
 
 def get_color_index(name):
@@ -352,7 +396,7 @@ def get_scope(flags):
     return "c{0}_c{1}_{2}".format(
         get_color_index(flags['foreground']) if 'foreground' in flags else 'F',
         get_color_index(flags['background']) if 'background' in flags else 'B',
-        'd' if 'dim' in flags else ''
+        'd' if 'dim' in flags else '',
     )
 
 
@@ -363,31 +407,38 @@ def reduce_to_ansi(seq, supported_rgb):
     seq = regex_ansi_8bit.sub(
         lambda m: get_ansi_8bit_escape_sequence(
             find_closest_color(
-                ansi_8bit_to_rgb(int(m.groupdict()['color'])),
-                supported_rgb
+                ansi_8bit_to_rgb(int(m.groupdict()['color'])), supported_rgb
             ),
-            m.groupdict()['fg']
+            m.groupdict()['fg'],
         ),
-        seq
+        seq,
     )
 
-    regex_ansi_16bit = get_regex_obj(r'\b((?P<fg>38)|48);2;(?P<red>{0});(?P<green>{0});(?P<blue>{0})'.format(r256))
+    regex_ansi_16bit = get_regex_obj(
+        r'\b((?P<fg>38)|48);2;(?P<red>{0});(?P<green>{0});(?P<blue>{0})'.format(r256)
+    )
     seq = regex_ansi_16bit.sub(
         lambda m: get_ansi_8bit_escape_sequence(
             find_closest_color(
-                (int(m.groupdict()['red']), int(m.groupdict()['green']), int(m.groupdict()['blue'])),
-                supported_rgb
+                (
+                    int(m.groupdict()['red']),
+                    int(m.groupdict()['green']),
+                    int(m.groupdict()['blue']),
+                ),
+                supported_rgb,
             ),
-            m.groupdict()['fg']
+            m.groupdict()['fg'],
         ),
-        seq
+        seq,
     )
 
     return seq
 
 
 def get_ansi_8bit_escape_sequence(color_name, is_foreground):
-    return str(SEQUENCES['foreground' if is_foreground else 'background'][color_name][0])
+    return str(
+        SEQUENCES['foreground' if is_foreground else 'background'][color_name][0]
+    )
 
 
 def ansi_8bit_to_rgb(num):
@@ -397,11 +448,7 @@ def ansi_8bit_to_rgb(num):
         return (c, c, c)
 
     num -= 16
-    return (
-        int(num / 36) / 5 * 255,
-        int((num % 36) / 6) / 5 * 255,
-        (num % 6) / 5 * 255
-    )
+    return (int(num / 36) / 5 * 255, int((num % 36) / 6) / 5 * 255, (num % 6) / 5 * 255)
 
 
 def parse_color_to_rgb(value):
@@ -415,7 +462,9 @@ def parse_color_to_rgb(value):
 
     hex_to_dec = lambda c: int(((c or 'F') + (c or 'F'))[:2], 16)
 
-    REGEX_HEX_SHORT = r'^\s*#(?P<red>{0})(?P<green>{0})(?P<blue>{0})(?P<alpha>{0})?\s*$'.format(REGEX_RANGE_0_F)
+    REGEX_HEX_SHORT = r'^\s*#(?P<red>{0})(?P<green>{0})(?P<blue>{0})(?P<alpha>{0})?\s*$'.format(
+        REGEX_RANGE_0_F
+    )
     m = re.match(get_regex_obj(REGEX_HEX_SHORT, flags=re.IGNORECASE), value)
     if m:
         m = m.groupdict()
@@ -423,10 +472,12 @@ def parse_color_to_rgb(value):
             hex_to_dec(m['red']),
             hex_to_dec(m['green']),
             hex_to_dec(m['blue']),
-            hex_to_dec(m['alpha']) / 255
+            hex_to_dec(m['alpha']) / 255,
         )
 
-    REGEX_HEX_FULL = r'^\s*#(?P<red>{0}{0})(?P<green>{0}{0})(?P<blue>{0}{0})(?P<alpha>{0}{0})?\s*$'.format(REGEX_RANGE_0_F)
+    REGEX_HEX_FULL = r'^\s*#(?P<red>{0}{0})(?P<green>{0}{0})(?P<blue>{0}{0})(?P<alpha>{0}{0})?\s*$'.format(
+        REGEX_RANGE_0_F
+    )
     m = re.match(get_regex_obj(REGEX_HEX_FULL, flags=re.IGNORECASE), value)
     if m:
         m = m.groupdict()
@@ -434,25 +485,30 @@ def parse_color_to_rgb(value):
             hex_to_dec(m['red']),
             hex_to_dec(m['green']),
             hex_to_dec(m['blue']),
-            hex_to_dec(m['alpha']) / 255
+            hex_to_dec(m['alpha']) / 255,
         )
 
-    REGEX_RGBA = r'^\s*rgba?\(\s*(?P<red>{0})\s*,\s*(?P<green>{0})\s*,\s*(?P<blue>{0})\s*(,\s*(?P<alpha>{1})\s*)?\)\s*$'.format(REGEX_RANGE_0_255, REGEX_RANGE_0_1_FLOAT)
+    REGEX_RGBA = r'^\s*rgba?\(\s*(?P<red>{0})\s*,\s*(?P<green>{0})\s*,\s*(?P<blue>{0})\s*(,\s*(?P<alpha>{1})\s*)?\)\s*$'.format(
+        REGEX_RANGE_0_255, REGEX_RANGE_0_1_FLOAT
+    )
     m = re.match(get_regex_obj(REGEX_RGBA, flags=re.IGNORECASE), value)
     if m:
         m = m.groupdict()
-        return (
-            int(m['red']),
-            int(m['green']),
-            int(m['blue']),
-            float(m['alpha'] or 1)
-        )
+        return (int(m['red']), int(m['green']), int(m['blue']), float(m['alpha'] or 1))
 
-    REGEX_HSLA = r'^\s*hsla?\s*\(\s*(?P<hue>{0})\s*,\s*(?P<saturation>0|({1}%))\s*,\s*(?P<light>0|({1}%))\s*(,\s*(?P<alpha>{2}))?\s*\)'.format(REGEX_RANGE_0_360, REGEX_RANGE_0_100, REGEX_RANGE_0_1_FLOAT)
+    REGEX_HSLA = r'^\s*hsla?\s*\(\s*(?P<hue>{0})\s*,\s*(?P<saturation>0|({1}%))\s*,\s*(?P<light>0|({1}%))\s*(,\s*(?P<alpha>{2}))?\s*\)'.format(
+        REGEX_RANGE_0_360, REGEX_RANGE_0_100, REGEX_RANGE_0_1_FLOAT
+    )
     m = re.match(get_regex_obj(REGEX_RGBA, flags=re.IGNORECASE), value)
     if m:
         m = m.groupdict()
-        rgb = hsl_to_rgb((int(m['hue']), int(m['saturation'].rstrip('%')), int(m['light'].rstrip('%'))))
+        rgb = hsl_to_rgb(
+            (
+                int(m['hue']),
+                int(m['saturation'].rstrip('%')),
+                int(m['light'].rstrip('%')),
+            )
+        )
         return rgb + (float(m['alpha'] or 1))
 
     value = value.strip().lower()
@@ -479,8 +535,10 @@ def hsl_to_rgb(hsl):
     rgb = (0, 0, 0)
     for i in range(3):
         t3 = hue + 1 / 3 * -(i - 1)
-        if t3 < 0: t3 += 1
-        if t3 > 1: t3 -= 1
+        if t3 < 0:
+            t3 += 1
+        if t3 > 1:
+            t3 -= 1
 
         if 6 * t3 < 1:
             val = t1 + (t2 - t1) * 6 * t3
@@ -521,7 +579,6 @@ def euclidean_distance(a, b):
 
 
 class AnsiRegion(object):
-
     def __init__(self, scope):
         super(AnsiRegion, self).__init__()
         self.scope = scope
@@ -555,7 +612,6 @@ class AnsiRegion(object):
 
 
 class AnsiCommand(sublime_plugin.TextCommand):
-
     def run(self, edit, regions=None, clear_before=False):
         view = self.view
         if view.settings().get("ansi_in_progres", False):
@@ -569,7 +625,9 @@ class AnsiCommand(sublime_plugin.TextCommand):
             view.settings().set("syntax", "Packages/sublime-ansi/ANSI.sublime-syntax")
 
         view.settings().set("ansi_enabled", True)
-        view.settings().set("color_scheme", "Packages/User/sublime-ansi/ansi.sublime-color-scheme")
+        view.settings().set(
+            "color_scheme", "Packages/User/sublime-ansi/ansi.sublime-color-scheme"
+        )
         view.settings().set("draw_white_space", "none")
 
         # save the view's original scratch and read only settings
@@ -586,10 +644,9 @@ class AnsiCommand(sublime_plugin.TextCommand):
 
         if regions is None:
             self._colorize_ansi_codes(edit)
+            self._colorize_highlight_regions(edit)
         else:
             self._colorize_regions(regions)
-
-        self._colorize_highlight_regions(edit)
 
         view.settings().set("ansi_in_progres", False)
         view.settings().set("ansi_size", view.size())
@@ -597,97 +654,50 @@ class AnsiCommand(sublime_plugin.TextCommand):
 
     def _colorize_regions(self, regions):
         view = self.view
+        debug(view, '_colorize_regions: {}\n---------\n'.format(regions))
         for scope, regions_points in regions.items():
-            regions = []
-            for a, b in regions_points:
-                regions.append(sublime.Region(a, b))
+            regions = [sublime.Region(a, b) for a, b in regions_points]
             sum_regions = view.get_regions(scope) + regions
-            view.add_regions(scope, sum_regions, scope, '', sublime.DRAW_NO_OUTLINE | sublime.PERSISTENT)
+            view.add_regions(
+                scope,
+                sum_regions,
+                scope,
+                '',
+                sublime.DRAW_NO_OUTLINE | sublime.PERSISTENT,
+            )
 
     def _colorize_ansi_codes(self, edit):
         view = self.view
 
-        ansi_codes = fast_view_find_all(view, r'\x1b\[([0-9;]*)m')
-
-        settings = sublime.load_settings("ansi.sublime-settings")
-        ANSI_COLORS_RGB = {k: parse_color_to_rgb(v) for k, v in settings.get('ANSI_COLORS', {}).items()}
-
         # collect ansi regions
-        ansi_regions = {
-            # scope: regions,
-        }
-
-        text_length = 0  # length of all ansi text
-        seq_length = 0  # length of all escaped sequences
-        flags = {}
-        for seq_region, codes in ansi_codes:
-            this_text_length = seq_region.a - (text_length + seq_length)
-            this_seq_length = seq_region.b - seq_region.a
-            if this_text_length:
-                text_region = sublime.Region(text_length, text_length + this_text_length)
-                scope = get_scope(flags)
-                if scope not in ansi_regions:
-                    ansi_regions[scope] = []
-                ansi_regions[scope].append(text_region)
-                debug(view, "scope: {}\nregions: {}\n----------\n".format(scope, ansi_regions[scope]))
-
-            text_length += this_text_length
-            seq_length += this_seq_length
-
-            codes = reduce_to_ansi(codes, ANSI_COLORS_RGB)
-            codes = map(int, filter(None, codes.split(';')))
-            for code in codes:
-                for flag, variants in SEQUENCES.items():
-                    for value, (code_on, code_off) in variants.items():
-                        if code == code_on:
-                            flags[flag] = value
-                        elif code in code_off:
-                            flags.pop(flag, None)
-
-        # close last region if it doesn't close properly
-        last_text_length = view.size() - (text_length + seq_length)
-        if last_text_length:
-            text_region = sublime.Region(text_length, text_length + last_text_length)
-            scope = get_scope(flags)
-            if scope not in ansi_regions:
-                ansi_regions[scope] = []
-            ansi_regions[scope].append(text_region)
-            debug(view, "scope: {}\nregions: {}\n----------\n".format(scope, ansi_regions[scope]))
+        content = view.substr(sublime.Region(0, view.size()))
+        regions = ansi_regions(content)
+        debug(view, "regions: {}\n----------\n".format(regions))
 
         # removing ansi escaped codes
-        for r, _ in reversed(ansi_codes):
-            view.erase(edit, r)
+        for (a, b), _ in reversed(find_all(content, r'\x1b\[([0-9;]*)m')):
+            view.erase(edit, sublime.Region(a, b))
 
         # render corrected ansi regions
-        for scope, regions in ansi_regions.items():
-            sum_regions = view.get_regions(scope) + regions
-            view.add_regions(scope, sum_regions, scope, '', sublime.DRAW_NO_OUTLINE | sublime.PERSISTENT)
+        self._colorize_regions(regions)
 
     def _remove_ansi_regions(self):
         view = self.view
-        for ansi in ansi_definitions():
-            view.erase_regions(ansi.scope)
+        for scope in ansi_regions():
+            view.erase_regions(scope)
 
     def _colorize_highlight_regions(self, edit):
         view = self.view
-        settings = sublime.load_settings("ansi.sublime-settings")
-        h = 0
-        for rule in settings.get('HIGHLIGHT', []):
-            h += 1
-            scope = 'h{0}'.format(h)
-            regions = [i[0] for i in fast_view_find_all(view, rule['regex'], re.IGNORECASE)]
-            sum_regions = view.get_regions(scope) + regions
-            view.add_regions(scope, sum_regions, scope, '', sublime.DRAW_NO_OUTLINE | sublime.PERSISTENT)
+        content = view.substr(sublime.Region(0, view.size()))
+        self._colorize_regions(highlight_regions(content))
 
     def _remove_highlight_regions(self):
         view = self.view
-        settings = sublime.load_settings("ansi.sublime-settings")
-        for h in range(len(settings.get('HIGHLIGHT', []))):
-            view.erase_regions('h{0}'.format(h))
+        for scope in highlight_regions():
+            view.erase_regions(scope)
 
 
 class UndoAnsiCommand(sublime_plugin.WindowCommand):
-
     def run(self):
         view = self.window.active_view()
         # if ansi is in progress or don't have ansi_in_progress setting
@@ -708,8 +718,8 @@ class UndoAnsiCommand(sublime_plugin.WindowCommand):
 
         view.set_read_only(False)
         view.run_command("undo")
-        for ansi in ansi_definitions():
-            view.erase_regions(ansi.scope)
+        for scope in ansi_regions():
+            view.erase_regions(scope)
 
         # restore the view's original scratch and read only settings
         view.set_scratch(view.settings().get("ansi_scratch", False))
@@ -721,7 +731,6 @@ class UndoAnsiCommand(sublime_plugin.WindowCommand):
 
 
 class AnsiEventListener(sublime_plugin.EventListener):
-
     def on_new_async(self, view):
         self.process_view_open(view)
 
@@ -739,7 +748,7 @@ class AnsiEventListener(sublime_plugin.EventListener):
 
     def process_view_close(self, view):
         self._del_event_listeners(view)
-        #if view.settings().get("syntax") == "Packages/sublime-ansi/ANSI.sublime-syntax":
+        # if view.settings().get("syntax") == "Packages/sublime-ansi/ANSI.sublime-syntax":
         #    view.window().run_command("undo_ansi") ** this needs to be tested **
 
     def detect_left_ansi(self, view):
@@ -785,8 +794,12 @@ class AnsiEventListener(sublime_plugin.EventListener):
         return True
 
     def _add_event_listeners(self, view):
-        view.settings().add_on_change("CHECK_FOR_ANSI_SYNTAX", lambda: self.detect_syntax_change(view))
-        view.settings().add_on_change("CHECK_FOR_LEFT_ANSI", lambda: self.detect_left_ansi(view))
+        view.settings().add_on_change(
+            "CHECK_FOR_ANSI_SYNTAX", lambda: self.detect_syntax_change(view)
+        )
+        view.settings().add_on_change(
+            "CHECK_FOR_LEFT_ANSI", lambda: self.detect_left_ansi(view)
+        )
         debug(view, "sublime-ansi event listeners assigned to view.")
 
     def _del_event_listeners(self, view):
@@ -806,66 +819,61 @@ class AnsiColorBuildCommand(Default.exec.ExecCommand):
             self.process_trigger = val
         else:
             self.process_trigger = None
-            sublime.error_message("sublime-ansi settings warning:\n\nThe setting ANSI_process_trigger has been set to an invalid value; must be one of 'on_finish' or 'on_data'.")
+            sublime.error_message(
+                "sublime-ansi settings warning:\n\nThe setting ANSI_process_trigger has been set to an invalid value; must be one of 'on_finish' or 'on_data'."
+            )
 
     @classmethod
     def clear_build_settings(self, settings):
         self.process_trigger = None
 
     def on_data_process(self, proc, data):
-        # note that ST 3169 is the same with 3170
-        needDataCodec = True if int(sublime.version()) < 3169 else False
-
         view = self.output_view
-        if not view.settings().get("syntax") == "Packages/sublime-ansi/ANSI.sublime-syntax":
+        if (
+            not view.settings().get("syntax")
+            == "Packages/sublime-ansi/ANSI.sublime-syntax"
+        ):
             super(AnsiColorBuildCommand, self).on_data(proc, data)
             return
 
         str_data = data
 
-        if needDataCodec:
-            str_data = str_data.decode(self.encoding)
-
-        # replace unsupported ansi escape codes before going forward: 2m 4m 5m 7m 8m
-        unsupported_pattern = r'\x1b\[(0;)?[24578]m'
-        str_data = re.sub(unsupported_pattern, "\x1b[1m", str_data)
-
         # find all regions
-        ansi_regions = []
-        for ansi in ansi_definitions(str_data):
-            if re.search(ansi.regex, str_data):
-                reg = re.finditer(ansi.regex, str_data)
-                new_region = AnsiRegion(ansi.scope)
-                for m in reg:
-                    new_region.add(*m.span())
-                ansi_regions.append(new_region)
+        regions = ansi_regions(str_data)
+
+        # adjust regions location because there was data
+        adjust_val = view.size()
+        adjusted_regions = {}
+        print('DIZZ', str_data)
+        print('BEFORE', regions)
+        for scope, regions in regions.items():
+            adjusted_regions[scope] = [
+                (a + adjust_val, b + adjust_val) for a, b in regions
+            ]
+        print('AFTER', adjusted_regions)
 
         # remove codes
-        remove_pattern = r'(\x1b\[[0-9;]*m)+'
-        ansi_codes = re.finditer(remove_pattern, str_data)
-        ansi_codes = list(ansi_codes)
-        ansi_codes.reverse()
-        for c in ansi_codes:
-            to_remove = c.span()
-            for r in ansi_regions:
-                r.cut_area(*to_remove)
-        out_data = re.sub(remove_pattern, "", str_data)
+        ansi_codes = find_all(str_data, r'(\x1b\[[0-9;]*m)+')
+        for (a, b), _ in reversed(ansi_codes):
+            print('cut', a, b)
+            print('before', str_data)
+            str_data = str_data[0:a] + str_data[b:]
+            print('after', str_data)
 
-        # create json serialable region representation
-        json_ansi_regions = {}
-        shift_val = view.size()
-        for region in ansi_regions:
-            region.shift(shift_val)
-            json_ansi_regions.update(region.jsonable())
-
-        if needDataCodec:
-            out_data = out_data.encode(self.encoding)
+        highlights = highlight_regions(str_data)
+        print('highlights', highlights)
+        adjusted_highlights = {}
+        for scope, regions in highlights.items():
+            adjusted_highlights[scope] = [
+                (a + adjust_val, b + adjust_val) for a, b in regions
+            ]
 
         # send on_data without ansi codes
-        super(AnsiColorBuildCommand, self).on_data(proc, out_data)
+        super(AnsiColorBuildCommand, self).on_data(proc, str_data)
 
         # send ansi command
-        view.run_command('ansi', args={"regions": json_ansi_regions})
+        view.run_command('ansi', args={"regions": adjusted_regions})
+        # view.run_command('ansi', args={"regions": adjusted_highlights})
 
     def on_data(self, proc, data):
         if self.process_trigger == "on_data":
@@ -877,7 +885,10 @@ class AnsiColorBuildCommand(Default.exec.ExecCommand):
         super(AnsiColorBuildCommand, self).on_finished(proc)
         if self.process_trigger == "on_finish":
             view = self.output_view
-            if view.settings().get("syntax") == "Packages/sublime-ansi/ANSI.sublime-syntax":
+            if (
+                view.settings().get("syntax")
+                == "Packages/sublime-ansi/ANSI.sublime-syntax"
+            ):
                 view.run_command("ansi", args={"clear_before": True})
 
 
@@ -892,14 +903,10 @@ def adjust_to_diff(color, base):
 
     color = parse_color_to_rgb(color)
     base = parse_color_to_rgb(base)
-    if color != base: return rgb_to_hex(color)
+    if color != base:
+        return rgb_to_hex(color)
 
-    return rgb_to_hex((
-        color[0],
-        color[1],
-        color[2] - 1 if color[2] else 1,
-        color[3]
-    ))
+    return rgb_to_hex((color[0], color[1], color[2] - 1 if color[2] else 1, color[3]))
 
 
 def merge_dict(*argv):
@@ -914,13 +921,16 @@ def merge_dict(*argv):
 def generate_color_scheme(cs_file, settings):
     print("Regenerating ANSI color scheme...")
 
-    ANSI_COLORS = settings.get('ANSI_COLORS', {})
-    ANSI_dim_alpha = settings.get('ANSI_dim_alpha', 0.7)
+    ANSI_COLORS = get_settings('ANSI_COLORS', {})
+    ANSI_dim_alpha = get_settings('ANSI_dim_alpha', 0.7)
     HIGHLIGHT = settings.get('HIGHLIGHT', [])
-    GENERAL = merge_dict({
-        'foreground': ANSI_COLORS['white'] or '#fff',
-        'background': ANSI_COLORS['black'] or '#000'
-    }, settings.get('GENERAL', {}))
+    GENERAL = get_settings(
+        'GENERAL',
+        {
+            'foreground': ANSI_COLORS['white'] or '#fff',
+            'background': ANSI_COLORS['black'] or '#000',
+        },
+    )
 
     view_fg = GENERAL['foreground']
     view_bg = GENERAL['background']
@@ -928,50 +938,58 @@ def generate_color_scheme(cs_file, settings):
     # FIX: reverted color when painting black background
     ANSI_COLORS['black'] = adjust_to_diff(ANSI_COLORS['black'], view_bg)
 
-    dim = lambda color, alpha=ANSI_dim_alpha: 'color({0} alpha({1}))'.format(color, alpha)
+    dim = lambda color, alpha=ANSI_dim_alpha: 'color({0} alpha({1}))'.format(
+        color, alpha
+    )
 
     scheme = {
         'name': 'ANSI',
         'variables': {
             'cF': view_fg,
             'cFd': dim(view_fg),
-
             # FIX: reverted color when painting transparent background
             'cB': adjust_to_diff(view_bg, view_bg),
         },
-        'globals': merge_dict({
-            'gutter': view_bg,
-            'gutter_foreground': dim(view_fg, 0.5),
-            'caret': dim(view_fg, 0.7),
-            'selection': dim(ANSI_COLORS['white_light'], 0.2),
-            'line_highlight': dim(ANSI_COLORS['white_light'], 0.25),
-            'selection_corner_style': 'square',
-            'selection_border_width': '0',
-            'guide': view_bg,
-            'active_guide': view_bg,
-            'stack_guide': view_bg,
-        }, GENERAL),
-        'rules': []
+        'globals': merge_dict(
+            {
+                'gutter': view_bg,
+                'gutter_foreground': dim(view_fg, 0.5),
+                'caret': dim(view_fg, 0.7),
+                'selection': dim(ANSI_COLORS['white_light'], 0.2),
+                'line_highlight': dim(ANSI_COLORS['white_light'], 0.25),
+                'selection_corner_style': 'square',
+                'selection_border_width': '0',
+                'guide': view_bg,
+                'active_guide': view_bg,
+                'stack_guide': view_bg,
+            },
+            GENERAL,
+        ),
+        'rules': [],
     }
     for i in range(16):
-        scheme['variables']['c{0}'.format(i+1)] = ANSI_COLORS[ANSI_NAMES[i]]
-        scheme['variables']['c{0}d'.format(i+1)] = dim(ANSI_COLORS[ANSI_NAMES[i]])
+        scheme['variables']['c{0}'.format(i + 1)] = ANSI_COLORS[ANSI_NAMES[i]]
+        scheme['variables']['c{0}d'.format(i + 1)] = dim(ANSI_COLORS[ANSI_NAMES[i]])
     for fg in ('F',) + tuple(range(1, 17)):
         for bg in ('B',) + tuple(range(1, 17)):
             for dim in ['', 'd']:
-                scheme['rules'].append({
-                    'scope': 'c{0}_c{1}_{2}'.format(fg, bg, dim),
-                    'foreground': 'var(c{0}{1})'.format(fg, dim),
-                    'background': 'var(c{0})'.format(bg)
-                })
+                scheme['rules'].append(
+                    {
+                        'scope': 'c{0}_c{1}_{2}'.format(fg, bg, dim),
+                        'foreground': 'var(c{0}{1})'.format(fg, dim),
+                        'background': 'var(c{0})'.format(bg),
+                    }
+                )
     h = 0
     for rule in HIGHLIGHT:
         h += 1
-        scheme['rules'].append({
-            'scope': 'h{0}'.format(h),
-            'foreground': rule['foreground'] if 'foreground' in rule else 'var(cF)',
-            'background': rule['background'] if 'background' in rule else 'var(cB)',
-        })
+        scheme['rules'].append(
+            {
+                'scope': 'h{0}'.format(h),
+                'foreground': rule['foreground'] if 'foreground' in rule else 'var(cF)',
+                'background': rule['background'] if 'background' in rule else 'var(cB)',
+            }
+        )
     with open(cs_file, 'w') as color_scheme:
         json.dump(scheme, color_scheme, separators=(',', ':'))
 
@@ -989,12 +1007,17 @@ def plugin_loaded():
         generate_color_scheme(cs_file, settings)
     # update the settings for the plugin
     AnsiColorBuildCommand.update_build_settings(settings)
-    settings.add_on_change("ANSI_COLORS_CHANGE", lambda: generate_color_scheme(cs_file, settings))
-    settings.add_on_change("ANSI_TRIGGER_CHANGE", lambda: AnsiColorBuildCommand.update_build_settings(settings))
+    settings.add_on_change(
+        "ANSI_COLORS_CHANGE", lambda: generate_color_scheme(cs_file, settings)
+    )
+    settings.add_on_change(
+        "ANSI_TRIGGER_CHANGE",
+        lambda: AnsiColorBuildCommand.update_build_settings(settings),
+    )
     # update the setting for each view
-    for window in sublime.windows():
-        for view in window.views():
-            AnsiEventListener().process_view_open(view)
+    # for window in sublime.windows():
+    #     for view in window.views():
+    #         AnsiEventListener().process_view_open(view)
 
 
 def plugin_unloaded():
@@ -1004,6 +1027,6 @@ def plugin_unloaded():
     settings.clear_on_change("ANSI_COLORS_CHANGE")
     settings.clear_on_change("ANSI_TRIGGER_CHANGE")
     # update the setting for each view
-    for window in sublime.windows():
-        for view in window.views():
-            AnsiEventListener().process_view_close(view)
+    # for window in sublime.windows():
+    #     for view in window.views():
+    #         AnsiEventListener().process_view_close(view)
